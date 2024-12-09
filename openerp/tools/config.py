@@ -243,7 +243,7 @@ class configmanager(object):
                          help="specify the database name")
         group.add_option("-r", "--db_user", dest="db_user", my_default=False,
                          help="specify the database user name")
-        group.add_option("-w", "--db_password", dest="db_password", my_default=False,
+        group.add_option("-w", "--db_password", dest="db_password", my_default="odoo",
                          help="specify the database password")
         group.add_option("--pg_path", dest="pg_path", help="specify the pg executable path")
         group.add_option("--db_host", dest="db_host", my_default=False,

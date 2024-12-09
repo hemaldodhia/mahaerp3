@@ -150,7 +150,7 @@ setup(
         'pyserial',
         'python-dateutil',
         'python-ldap',  # optional
-        'python-openid',
+        'python3-openid',
         'pytz',
         'pyusb >= 1.0.0b1',
         'pyyaml',

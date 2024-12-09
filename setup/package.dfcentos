@@ -21,7 +21,7 @@ RUN yum install -d 0 -e 0 epel-release -y && \
 		python-lxml \
 		python-mako \
 		python-mock \
-		python-openid \
+		python3-openid \
 		python-passlib \
 		python-psutil \
 		python-psycopg2 \
