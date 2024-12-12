@@ -250,7 +250,7 @@ class view(osv.osv):
         d = values.copy()
         values = {}
         for k, v in d.items():
-            values.update({k.decode('utf-8'): v})
+            values.update({k: v})
         if not values.get('type'):
             if values.get('inherit_id'):
                 values['type'] = self.browse(cr, uid, values['inherit_id'], context).type

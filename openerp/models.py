@@ -3930,7 +3930,8 @@ class BaseModel(object, metaclass=MetaModel):
         recs.modified(direct)
 
         # call the 'set' method of fields which are not classic_write
-        upd_todo.sort(lambda x, y: self._columns[x].priority-self._columns[y].priority)
+        #upd_todo.sort(lambda x, y: self._columns[x].priority-self._columns[y].priority)
+        upd_todo.sort(key=(lambda x : self._columns[x].priority))
 
         # default element in context must be removed when call a one2many or many2many
         rel_context = context.copy()
@@ -4097,7 +4098,6 @@ class BaseModel(object, metaclass=MetaModel):
                     new_vals[key] = val
             else:
                 unknown.append(key)
-
         if unknown:
             unknown = [uk.decode('utf-8') if isinstance(uk, bytes) else uk for uk in unknown]
             _logger.warning("%s.create() with unknown fields: %s", self._name, ', '.join(sorted(unknown)))

@@ -1286,7 +1286,12 @@ class expression(object):
             if leaf.is_leaf(internal=True):
                 q, p = self.__leaf_to_sql(leaf)
                 params.insert(0, p)
-                p = isinstance(p, list) and p[0] or "'"+p.decode('utf-8')+"'"
+                pp = p
+                if isinstance(p, (bytes, bytearray)):
+                    pp = p.decode('utf-8')
+                else:
+                    pp = str(p)
+                p = isinstance(p, list) and p[0] or "'"+pp+"'"
                 stack.append(q % p)
 
             elif leaf.leaf == NOT_OPERATOR:

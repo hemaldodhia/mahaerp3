@@ -717,7 +717,7 @@ form: module.record_id""" % (xml_id,)
         res = {}
         for field in rec.findall('./field'):
             #TODO: most of this code is duplicated above (in _eval_xml)...
-            f_name = field.get("name").encode('utf-8')
+            f_name = field.get("name")
             f_ref = field.get("ref",'').encode('utf-8')
             f_search = field.get("search",'').encode('utf-8')
             f_model = field.get("model",'').encode('utf-8')
