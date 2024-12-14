@@ -463,7 +463,7 @@ class TinyPoFile(object):
         msg = "msgid %s\n"      \
               "msgstr %s\n\n"   \
                   % (quote(source), quote(trad))
-        self.buffer.write(msg.encode('utf8'))
+        self.buffer.write(msg)
 
 
 # Methods to export the translation file
@@ -541,11 +541,11 @@ def trans_parse_xsl_aux(de, t):
                 if n.text:
                     l = n.text.strip().replace('\n',' ')
                     if len(l):
-                        res.append(l.encode("utf8"))
+                        res.append(l)
                 if n.tail:
                     l = n.tail.strip().replace('\n',' ')
                     if len(l):
-                        res.append(l.encode("utf8"))
+                        res.append(l)
         res.extend(trans_parse_xsl_aux(n, t))
     return res
 
@@ -558,13 +558,13 @@ def trans_parse_rml(de):
             string_list = [s.replace('\n', ' ').strip() for s in re.split('\[\[.+?\]\]', m.text)]
             for s in string_list:
                 if s:
-                    res.append(s.encode("utf8"))
+                    res.append(s)
         res.extend(trans_parse_rml(n))
     return res
 
 def _push(callback, term, source_line):
     """ Sanity check before pushing translation terms """
-    term = (term or "").strip().encode('utf8')
+    term = (term or "").strip()
     # Avoid non-char tokens like ':' '...' '.00' etc.
     if len(term) > 8 or any(x.isalpha() for x in term):
         callback(term, source_line)
@@ -693,7 +693,7 @@ def trans_generate(lang, modules, cr):
 
     def encode(s):
         if isinstance(s, str):
-            return s.encode('utf8')
+            return s
         return s
 
     def push(mod, type, name, res_id, term):

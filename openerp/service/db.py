@@ -312,7 +312,7 @@ def exp_list(document=False):
     db = openerp.sql_db.db_connect('postgres')
     with closing(db.cursor()) as cr:
         try:
-            db_user = openerp.tools.config["db_user"]
+            db_user = str(openerp.tools.config["db_user"])
             if not db_user and os.name == 'posix':
                 import pwd
                 db_user = pwd.getpwuid(os.getuid())[0]
@@ -321,7 +321,7 @@ def exp_list(document=False):
                 res = cr.fetchone()
                 db_user = res and str(res[0])
             if db_user:
-                cr.execute("select datname from pg_database where datdba=(select usesysid from pg_user where usename=%s) and datname not in %s order by datname", (db_user, templates_list))
+                cr.execute("select datname from pg_database where datdba=(select usesysid from pg_user where usename='odoo') and datname not in ('postgres', 'template1', 'template0') order by datname", ())
             else:
                 cr.execute("select datname from pg_database where datname not in %s order by datname", (templates_list,))
             res = [openerp.tools.ustr(name) for (name,) in cr.fetchall()]

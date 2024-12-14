@@ -361,7 +361,7 @@ class YamlInterpreter(object):
                     # we want to return only the fields that aren't readonly
                     # For that, we need to first get the right tree view to consider for the field `key´
                     one2many_tree_view = _get_right_one2many_view(fg, key, 'tree')
-                    arch = etree.fromstring(one2many_tree_view['arch'].encode('utf-8'))
+                    arch = etree.fromstring(one2many_tree_view['arch'])
                     for rec in val:
                         # make a copy for the iteration, as we will alter `rec´
                         rec_copy = rec.copy()
@@ -387,7 +387,7 @@ class YamlInterpreter(object):
             return val
 
         if view_info:
-            arch = etree.fromstring(view_info['arch'].decode('utf-8'))
+            arch = etree.fromstring(view_info['arch'])
             view = arch if len(arch) else False
         else:
             view = False

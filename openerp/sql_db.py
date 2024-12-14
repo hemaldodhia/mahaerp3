@@ -234,22 +234,30 @@ class Cursor(object):
     def execute(self, query, params=None, log_exceptions=None):
         if '%d' in query or '%f' in query:
             _logger.warning(query)
-            _logger.warning("SQL queries cannot contain %d or %f anymore. Use only %s")
+            _logger.warning("SQL queries cannot contain %d or %f anymore. Use only %s", query)
         if params and not isinstance(params, (tuple, list, dict)):
             _logger.error("SQL query parameters should be a tuple, list or dict; got %r", params)
             raise ValueError("SQL query parameters should be a tuple, list or dict; got %r" % (params,))
 
         if self.sql_log:
             now = mdt.now()
-
+        _logger.error("DB qeuery 1 %s ", query )
+        _logger.error("DB queury 2 %r ", params)
         try:
             params = params or None
+            _logger.error("DB qeuery 3 %s ", query )
+            _logger.error("DB queury 4  %r ", params)
+            _logger.error("DB queury 5  %r ", self._obj)
             res = self._obj.execute(query, params)
         except psycopg2.ProgrammingError as pe:
+            _logger.error("SQL query parameters should be a tuple, list or dict; got %s", query )
+            _logger.error("SQL query parameters should be a tuple, list or dict; got %r", params)
             if self._default_log_exceptions if log_exceptions is None else log_exceptions:
                 _logger.error("Programming error: %s, in query %s", pe, query)
             raise
         except Exception:
+            _logger.error("SQL query parameters should be a tuple, list or dict; got %s", query )
+            _logger.error("SQL query parameters should be a tuple, list or dict; got %r", params)
             if self._default_log_exceptions if log_exceptions is None else log_exceptions:
                 _logger.exception("bad query: %s", self._obj.query or query)
             raise

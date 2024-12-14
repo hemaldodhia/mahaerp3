@@ -94,7 +94,7 @@ class report_rml(report_int):
     def create(self, cr, uid, ids, datas, context):
         registry = openerp.registry(cr.dbname)
         xml = self.create_xml(cr, uid, ids, datas, context)
-        xml = tools.ustr(xml).encode('utf8')
+        xml = tools.ustr(xml)
         report_type = datas.get('report_type', 'pdf')
         if report_type == 'raw':
             return xml, report_type
@@ -229,7 +229,7 @@ class report_rml(report_int):
     def create_txt(self, rml,localcontext, logo=None, title=None):
         obj = render.rml2txt(rml, localcontext, self.bin_datas)
         obj.render()
-        return obj.get().encode('utf-8')
+        return obj.get()
 
     def create_html2html(self, rml, localcontext = None, logo=None, title=None):
         obj = render.html2html(rml, localcontext, self.bin_datas)

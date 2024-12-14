@@ -91,7 +91,7 @@ def encode_header(header_text):
     if not header_text: return ""
     # convert anything to utf-8, suitable for testing ASCIIness, as 7-bit chars are
     # encoded as ASCII in utf-8
-    header_text_utf8 = tools.ustr(header_text).encode('utf-8')
+    header_text_utf8 = tools.ustr(header_text)
     header_text_ascii = try_coerce_ascii(header_text_utf8)
     # if this header contains non-ASCII characters,
     # we'll need to wrap it up in a message.header.Header
@@ -115,7 +115,7 @@ def encode_header_param(param_text):
     """
     # For details see the encode_header() method that uses the same logic
     if not param_text: return ""
-    param_text_utf8 = tools.ustr(param_text).encode('utf-8')
+    param_text_utf8 = tools.ustr(param_text)
     param_text_ascii = try_coerce_ascii(param_text_utf8)
     return param_text_ascii if param_text_ascii\
          else Charset('utf8').header_encode(param_text_utf8)
@@ -130,7 +130,7 @@ def extract_rfc2822_addresses(text):
        malformed ones and non-ASCII ones.
     """
     if not text: return []
-    candidates = address_pattern.findall(tools.ustr(text).encode('utf-8'))
+    candidates = address_pattern.findall(tools.ustr(text))
     return list(filter(try_coerce_ascii, candidates))
 
 def encode_rfc2822_address_header(header_text):
@@ -146,7 +146,7 @@ def encode_rfc2822_address_header(header_text):
             name = str(Header(name, 'utf-8'))
         return formataddr((name, email))
 
-    addresses = getaddresses([tools.ustr(header_text).encode('utf-8')])
+    addresses = getaddresses([tools.ustr(header_text)])
     return COMMASPACE.join(map(encode_addr, addresses))
 
 
@@ -251,8 +251,8 @@ class ir_mail_server(osv.osv):
             # The user/password must be converted to bytestrings in order to be usable for
             # certain hashing schemes, like HMAC.
             # See also bug #597143 and python issue #5285
-            user = tools.ustr(user).encode('utf-8')
-            password = tools.ustr(password).encode('utf-8') 
+            user = tools.ustr(user)
+            password = tools.ustr(password) 
             connection.login(user, password)
         return connection
 
@@ -301,7 +301,7 @@ class ir_mail_server(osv.osv):
         if not email_bcc: email_bcc = []
         if not body: body = ''
 
-        email_body_utf8 = ustr(body).encode('utf-8')
+        email_body_utf8 = ustr(body)
         email_text_part = MIMEText(email_body_utf8, _subtype=subtype, _charset='utf-8')
         msg = MIMEMultipart()
 
@@ -328,11 +328,11 @@ class ir_mail_server(osv.osv):
         msg['Date'] = formatdate()
         # Custom headers may override normal headers or provide additional ones
         for key, value in headers.items():
-            msg[ustr(key).encode('utf-8')] = encode_header(value)
+            msg[ustr(key)] = encode_header(value)
 
         if subtype == 'html' and not body_alternative and html2text:
             # Always provide alternative text body ourselves if possible.
-            text_utf8 = tools.html2text(email_body_utf8.decode('utf-8')).encode('utf-8')
+            text_utf8 = tools.html2text(email_body_utf8)
             alternative_part = MIMEMultipart(_subtype="alternative")
             alternative_part.attach(MIMEText(text_utf8, _charset='utf-8', _subtype='plain'))
             alternative_part.attach(email_text_part)
@@ -340,7 +340,7 @@ class ir_mail_server(osv.osv):
         elif body_alternative:
             # Include both alternatives, as specified, within a multipart/alternative part
             alternative_part = MIMEMultipart(_subtype="alternative")
-            body_alternative_utf8 = ustr(body_alternative).encode('utf-8')
+            body_alternative_utf8 = ustr(body_alternative)
             alternative_body_part = MIMEText(body_alternative_utf8, _subtype=subtype_alternative, _charset='utf-8')
             alternative_part.attach(alternative_body_part)
             alternative_part.attach(email_text_part)

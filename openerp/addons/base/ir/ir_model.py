@@ -226,7 +226,7 @@ class ir_model(osv.osv):
 
     def instanciate(self, cr, user, model, context=None):
         if isinstance(model, str):
-            model = model.encode('utf-8')
+            model = model
 
         class CustomModel(models.Model):
             _name = model

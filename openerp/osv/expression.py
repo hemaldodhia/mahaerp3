@@ -1262,7 +1262,7 @@ class expression(object):
                 if isinstance(right, str):
                     str_utf8 = right
                 elif isinstance(right, str):
-                    str_utf8 = right.encode('utf-8')
+                    str_utf8 = right
                 else:
                     str_utf8 = str(right)
                 params = '%%%s%%' % str_utf8
@@ -1287,21 +1287,30 @@ class expression(object):
                 q, p = self.__leaf_to_sql(leaf)
                 params.insert(0, p)
                 pp = p
-                if isinstance(p, (bytes, bytearray)):
-                    pp = p.decode('utf-8')
+                if isinstance(p, list) and len(p) > 1 and p[0]:
+                    pp = tuple(p)
+                elif isinstance(p, list) and len(p) == 1 and  p[0]:
+                    pp = "'"+str(isinstance(p, list) and p[0])+"'"
+                elif isinstance(p, list) and len(p) == 0:
+                   continue 
+                elif isinstance(p, (bytes, bytearray)):
+                    pp = str(p.decode('utf-8'))
+                elif isinstance(p, (str)):
+                    pp = "'"+p+"'"
                 else:
-                    pp = str(p)
-                p = isinstance(p, list) and p[0] or "'"+pp+"'"
-                stack.append(q % p)
+                    pp = "'"+str(p)+"'"
+                stack.append(q % pp)
 
             elif leaf.leaf == NOT_OPERATOR:
                 stack.append('(NOT (%s))' % (stack.pop(),))
             else:
                 ops = {AND_OPERATOR: ' AND ', OR_OPERATOR: ' OR '}
                 q1 = stack.pop()
-                q2 = stack.pop()
-                stack.append('(%s %s %s)' % (q1, ops[leaf.leaf], q2,))
-
+                if len(stack) == 0:
+                    stack.append('(%s)' % (q1))
+                else:
+                    q2 = stack.pop()
+                    stack.append('(%s %s %s)' % (q1, ops[leaf.leaf], q2,))
         assert len(stack) == 1
         query = stack[0]
         joins = ' AND '.join(self.joins)

@@ -32,7 +32,7 @@ Bonjour,
 
 Le message avec le sujet "%s" n'a pu être archivé dans l'ERP.
 
-""".decode('utf-8')
+"""
 
 class EmailParser(object):
 
@@ -102,7 +102,7 @@ class ReceiverEmail2Event(object):
         if partners:
             self.save_mail(msg, subject, partners)
         else:
-            warning = MIMEText((warn_msg % (subject,)).encode('utf-8'), 'plain', 'utf-8')
+            warning = MIMEText((warn_msg % (subject,)), 'plain', 'utf-8')
             warning['Subject'] = 'Message de OpenERP'
             warning['From'] = 'erp@steel-sa.com'
             warning['To'] = msg['From']

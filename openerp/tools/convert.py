@@ -28,7 +28,7 @@ import sys
 
 # for eval context:
 import time
-
+import base64
 import openerp
 import openerp.release
 import openerp.workflow
@@ -119,11 +119,11 @@ def _eval_xml(self, node, pool, cr, uid, idref, context=None):
         context = {}
     if node.tag in ('field','value'):
         t = node.get('type','char')
-        f_model = node.get('model', '').encode('utf-8')
+        f_model = node.get('model', '')
         if node.get('search'):
-            f_search = node.get("search",'').encode('utf-8')
-            f_use = node.get("use",'id').encode('utf-8')
-            f_name = node.get("name",'').encode('utf-8')
+            f_search = node.get("search",'')
+            f_use = node.get("use",'id')
+            f_name = node.get("name",'')
             idref2 = {}
             if f_search:
                 idref2 = _get_idref(self, cr, uid, f_model, context, idref)
@@ -171,7 +171,7 @@ def _eval_xml(self, node, pool, cr, uid, idref, context=None):
             _fix_multiple_roots(node)
             return '<?xml version="1.0"?>\n' +_process("".join([etree.tostring(n).decode('utf-8') for n in node]), idref)
         if t == 'html':
-            return _process("".join([etree.tostring(n).decode('utf-8') for n in node]), idref)
+            return _process("".join([etree.tostring(n) for n in node]), idref)
 
         data = node.text
         if node.get('file'):
@@ -190,7 +190,7 @@ def _eval_xml(self, node, pool, cr, uid, idref, context=None):
             return data
 
         if t == 'base64':
-            return data.encode('base64')
+            return base64.b64encode(data)
 
         if t == 'int':
             d = data.strip()
@@ -244,8 +244,8 @@ class xml_import(object):
         return self.noupdate or (len(data_node) and self.nodeattr2bool(data_node, 'noupdate', False))
 
     def get_context(self, data_node, node, eval_dict):
-        data_node_context = (len(data_node) and data_node.get('context','').encode('utf8'))
-        node_context = node.get("context",'').encode('utf8')
+        data_node_context = (len(data_node) and data_node.get('context',''))
+        node_context = node.get("context",'')
         context = {}
         for ctx in (data_node_context, node_context):
             if ctx:
@@ -287,7 +287,7 @@ form: module.record_id""" % (xml_id,)
 
     def _tag_delete(self, cr, rec, data_node=None, mode=None):
         d_model = rec.get("model")
-        d_search = rec.get("search",'').encode('utf-8')
+        d_search = rec.get("search",'')
         d_id = rec.get("id")
         ids = []
 
@@ -319,13 +319,13 @@ form: module.record_id""" % (xml_id,)
     def _tag_report(self, cr, rec, data_node=None, mode=None):
         res = {}
         for dest,f in (('name','string'),('model','model'),('report_name','name')):
-            res[dest] = rec.get(f,'').encode('utf8')
+            res[dest] = rec.get(f,'')
             assert res[dest], "Attribute %s of report is empty !" % (f,)
         for field,dest in (('rml','report_rml'),('file','report_rml'),('xml','report_xml'),('xsl','report_xsl'),
                            ('attachment','attachment'),('attachment_use','attachment_use'), ('usage','usage'),
                            ('report_type', 'report_type'), ('parser', 'parser')):
             if rec.get(field):
-                res[dest] = rec.get(field).encode('utf8')
+                res[dest] = rec.get(field)
         if rec.get('auto'):
             res['auto'] = safe_eval(rec.get('auto','False'))
         if rec.get('sxw'):
@@ -336,7 +336,7 @@ form: module.record_id""" % (xml_id,)
 
         res['multi'] = rec.get('multi') and safe_eval(rec.get('multi','False'))
 
-        xml_id = rec.get('id','').encode('utf8')
+        xml_id = rec.get('id','')
         self._test_xml_id(xml_id)
 
         if rec.get('groups'):
@@ -374,10 +374,10 @@ form: module.record_id""" % (xml_id,)
         return
 
     def _tag_url(self, cr, rec, data_node=None, mode=None):
-        url = rec.get("url",'').encode('utf8')
-        target = rec.get("target",'').encode('utf8')
-        name = rec.get("name",'').encode('utf8')
-        xml_id = rec.get('id','').encode('utf8')
+        url = rec.get("url",'')
+        target = rec.get("target",'')
+        name = rec.get("name",'')
+        xml_id = rec.get('id','')
         self._test_xml_id(xml_id)
 
         res = {'name': name, 'url': url, 'target':target}
@@ -386,21 +386,21 @@ form: module.record_id""" % (xml_id,)
         self.idref[xml_id] = int(id)
 
     def _tag_act_window(self, cr, rec, data_node=None, mode=None):
-        name = rec.get('name','').encode('utf-8')
-        xml_id = rec.get('id','').encode('utf8')
+        name = rec.get('name','')
+        xml_id = rec.get('id','')
         self._test_xml_id(xml_id)
-        type = rec.get('type','').encode('utf-8') or 'ir.actions.act_window'
+        type = rec.get('type','') or 'ir.actions.act_window'
         view_id = False
         if rec.get('view_id'):
-            view_id = self.id_get(cr, rec.get('view_id','').encode('utf-8'))
-        domain = rec.get('domain','').encode('utf-8') or '[]'
-        res_model = rec.get('res_model','').encode('utf-8')
-        src_model = rec.get('src_model','').encode('utf-8')
-        view_type = rec.get('view_type','').encode('utf-8') or 'form'
-        view_mode = rec.get('view_mode','').encode('utf-8') or 'tree,form'
-        usage = rec.get('usage','').encode('utf-8')
-        limit = rec.get('limit','').encode('utf-8')
-        auto_refresh = rec.get('auto_refresh','').encode('utf-8')
+            view_id = self.id_get(cr, rec.get('view_id',''))
+        domain = rec.get('domain','') or '[]'
+        res_model = rec.get('res_model','')
+        src_model = rec.get('src_model','')
+        view_type = rec.get('view_type','') or 'form'
+        view_mode = rec.get('view_mode','') or 'tree,form'
+        usage = rec.get('usage','')
+        limit = rec.get('limit','')
+        auto_refresh = rec.get('auto_refresh','')
         uid = self.uid
 
         # Act_window's 'domain' and 'context' contain mostly literals
@@ -487,7 +487,7 @@ form: module.record_id""" % (xml_id,)
 
         if src_model:
             #keyword = 'client_action_relate'
-            keyword = rec.get('key2','').encode('utf-8') or 'client_action_relate'
+            keyword = rec.get('key2','') or 'client_action_relate'
             value = 'ir.actions.act_window,'+str(id)
             replace = rec.get('replace','') or True
             self.pool['ir.model.data'].ir_set(cr, self.uid, 'action', keyword, xml_id, [src_model], value, replace=replace, isobject=True, xml_id=xml_id)
@@ -498,7 +498,7 @@ form: module.record_id""" % (xml_id,)
             return
         res = {}
         for field in rec.findall('./field'):
-            f_name = field.get("name",'').encode('utf-8')
+            f_name = field.get("name",'')
             f_val = _eval_xml(self,field,self.pool, cr, self.uid, self.idref)
             res[f_name] = f_val
         self.pool['ir.model.data'].ir_set(cr, self.uid, res['key'], res['key2'], res['name'], res['models'], res['value'], replace=res.get('replace',True), isobject=res.get('isobject', False), meta=res.get('meta',None))
@@ -532,7 +532,7 @@ form: module.record_id""" % (xml_id,)
     def _tag_menuitem(self, cr, rec, data_node=None, mode=None):
         rec_id = rec.get("id",'')
         self._test_xml_id(rec_id)
-        m_l = list(map(escape, escape_re.split(rec.get("name",'').encode('utf8'))))
+        m_l = list(map(escape, escape_re.split(rec.get("name",''))))
 
         values = {'parent_id': False}
         if rec.get('parent', False) is False and len(m_l) > 1:
@@ -573,7 +573,7 @@ form: module.record_id""" % (xml_id,)
                 res = None
 
         if rec.get('action'):
-            a_action = rec.get('action','').encode('utf8')
+            a_action = rec.get('action','')
 
             # determine the type of action
             action_type, action_id = self.model_id_get(cr, a_action)
@@ -626,10 +626,10 @@ form: module.record_id""" % (xml_id,)
         model = self.pool[rec_model]
         rec_id = rec.get("id",'')
         self._test_xml_id(rec_id)
-        rec_src = rec.get("search",'').encode('utf8')
+        rec_src = rec.get("search",'')
         rec_src_count = rec.get("count")
 
-        rec_string = rec.get("string",'').encode('utf8') or 'unknown'
+        rec_string = rec.get("string",'') or 'unknown'
 
         ids = None
         eval_dict = {'ref': _ref(self, cr)}
@@ -667,7 +667,7 @@ form: module.record_id""" % (xml_id,)
             globals_dict['ref'] = ref
             globals_dict['_ref'] = ref
             for test in rec.findall('./test'):
-                f_expr = test.get("expr",'').encode('utf-8')
+                f_expr = test.get("expr",'')
                 expected_value = _eval_xml(self, test, self.pool, cr, uid, self.idref, context=context) or True
                 expression_value = safe_eval(f_expr, globals_dict)
                 if expression_value != expected_value: # assertion failed
@@ -718,12 +718,12 @@ form: module.record_id""" % (xml_id,)
         for field in rec.findall('./field'):
             #TODO: most of this code is duplicated above (in _eval_xml)...
             f_name = field.get("name")
-            f_ref = field.get("ref",'').encode('utf-8')
-            f_search = field.get("search",'').encode('utf-8')
-            f_model = field.get("model",'').encode('utf-8')
+            f_ref = field.get("ref",'')
+            f_search = field.get("search",'')
+            f_model = field.get("model",'')
             if not f_model and f_name in model._fields:
                 f_model = model._fields[f_name].comodel_name
-            f_use = field.get("use",'').encode('utf-8') or 'id'
+            f_use = field.get("use",'') or 'id'
             f_val = False
 
             if f_search:

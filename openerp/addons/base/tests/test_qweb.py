@@ -59,7 +59,7 @@ class TestQWebTField(common.TransactionCase):
                   'data-oe-field="name" data-oe-type="char" '
                   'data-oe-expression="company.name">%s</span>' % (
                 company_id,
-                cgi.escape(s.encode('utf-8')),))
+                cgi.escape(s),))
 
     def test_reject_crummy_tags(self):
         field = etree.Element('td', {'t-field': 'company.name'})
@@ -128,7 +128,7 @@ class TestQWeb(common.TransactionCase):
             result = doc.find('result[@id="{}"]'.format(template)).text
             self.assertEqual(
                 qweb.render(template, qwebcontext=ctx).strip(),
-                (result or '').strip().encode('utf-8'),
+                (result or '').strip(),
                 template
             )
 

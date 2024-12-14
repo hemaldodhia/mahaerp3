@@ -503,7 +503,7 @@ class view(osv.osv):
             root_id = source_id
         sql_inherit = self.get_inheriting_views_arch(cr, uid, source_id, model, context=context)
         for (specs, view_id) in sql_inherit:
-            specs_tree = etree.fromstring(specs.encode('utf-8'))
+            specs_tree = etree.fromstring(specs)
             if context.get('inherit_branding'):
                 self.inherit_branding(specs_tree, view_id, root_id)
             source = self.apply_inheritance_specs(cr, uid, source, specs_tree, view_id, context=context)
@@ -539,7 +539,7 @@ class view(osv.osv):
 
         # read the view arch
         [view] = self.read(cr, uid, [root_id], fields=fields, context=context)
-        view_arch = etree.fromstring(view['arch'].encode('utf-8'))
+        view_arch = etree.fromstring(view['arch'])
         if not v.inherit_id:
             arch_tree = view_arch
         else:
@@ -595,7 +595,7 @@ class view(osv.osv):
 
         def encode(s):
             if isinstance(s, str):
-                return s.encode('utf8')
+                return s
             return s
 
         def check_group(node):

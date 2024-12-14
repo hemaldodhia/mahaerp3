@@ -842,6 +842,7 @@ def routing_map(modules, nodb_only, converters=None):
             members = inspect.getmembers(o, inspect.ismethod)
             for _, mv in members:
                 if hasattr(mv, 'routing'):
+                    _logger.info(" routing members in controllers %s " , mv)
                     routing = dict(type='http', auth='user', methods=None, routes=None)
                     methods_done = list()
                     # update routing attributes from subclasses(auth, methods...)
@@ -1288,6 +1289,7 @@ class Root(object):
     @lazy_property
     def nodb_routing_map(self):
         _logger.info("Generating nondb routing")
+        _logger.info(" %s " , routing_map([''] + openerp.conf.server_wide_modules, True) )
         return routing_map([''] + openerp.conf.server_wide_modules, True)
 
     def __call__(self, environ, start_response):
@@ -1590,7 +1592,7 @@ def send_file(filepath_or_fp, mimetype=None, as_attachment=False, filename=None,
             mtime,
             size,
             adler32(
-                filename.encode('utf-8') if isinstance(filename, str)
+                filename if isinstance(filename, str)
                 else filename
             ) & 0xffffffff
         ))

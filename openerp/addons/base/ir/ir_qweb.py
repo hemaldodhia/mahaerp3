@@ -66,8 +66,8 @@ def raise_qweb_exception(etype=None, **kw):
 
 def _build_attribute(name, value):
     value = escape(value)
-    if isinstance(name, str): name = name.encode('utf-8')
-    if isinstance(value, str): value = value.encode('utf-8')
+    if isinstance(name, str): name = name
+    if isinstance(value, str): value = value
     return ' %s="%s"' % (name, value)
 
 class QWebContext(dict):
@@ -214,7 +214,7 @@ class QWeb(orm.AbstractModel):
             return qwebcontext.get(0, '')
         val = self.eval(expr, qwebcontext)
         if isinstance(val, str):
-            return val.encode("utf8")
+            return val
         if val is False or val is None:
             return ''
         return str(val)
@@ -275,7 +275,7 @@ class QWeb(orm.AbstractModel):
                 if not can_see:
                     return ''
 
-            attribute_value = attribute_value.encode("utf8")
+            attribute_value = attribute_value
 
             if attribute_name.startswith("t-"):
                 for attribute in self._render_att:
@@ -302,10 +302,10 @@ class QWeb(orm.AbstractModel):
             result = self.render_element(element, template_attributes, generated_attributes, qwebcontext)
 
         if element.tail:
-            result += element.tail.encode('utf-8')
+            result += element.tail
 
         if isinstance(result, str):
-            return result.encode('utf-8')
+            return result
         return result
 
     def render_element(self, element, template_attributes, generated_attributes, qwebcontext, inner=None):
@@ -315,9 +315,9 @@ class QWeb(orm.AbstractModel):
         # qwebcontext: values
         # inner: optional innerXml
         if inner:
-            g_inner = inner.encode('utf-8') if isinstance(inner, str) else inner
+            g_inner = inner if isinstance(inner, str) else inner
         else:
-            g_inner = [] if element.text is None else [element.text.encode('utf-8')]
+            g_inner = [] if element.text is None else [element.text]
             for current_node in element.iterchildren(tag=etree.Element):
                 try:
                     g_inner.append(self.render_node(current_node, qwebcontext))
@@ -341,11 +341,11 @@ class QWeb(orm.AbstractModel):
             return inner
         elif len(inner) or name not in self._void_elements:
             return "<%s%s>%s</%s>" % tuple(
-                qwebcontext if isinstance(qwebcontext, str) else qwebcontext.encode('utf-8')
+                qwebcontext if isinstance(qwebcontext, str) else qwebcontext
                 for qwebcontext in (name, generated_attributes, inner, name)
             )
         else:
-            return "<%s%s/>" % (name.encode("utf-8"), generated_attributes)
+            return "<%s%s/>" % (name, generated_attributes)
 
     def render_attribute(self, element, name, value, qwebcontext):
         return _build_attribute(name, value)
@@ -966,7 +966,7 @@ class Contact(orm.AbstractModel):
             'options': options
         }
 
-        html = self.pool["ir.ui.view"].render(cr, uid, "base.contact", val, engine='ir.qweb', context=context).decode('utf8')
+        html = self.pool["ir.ui.view"].render(cr, uid, "base.contact", val, engine='ir.qweb', context=context)
 
         return HTMLSafe(html)
 
@@ -986,7 +986,7 @@ class QwebView(orm.AbstractModel):
 
         ctx = (context or {}).copy()
         ctx['object'] = record
-        html = view.render(ctx, engine='ir.qweb', context=ctx).decode('utf8')
+        html = view.render(ctx, engine='ir.qweb', context=ctx)
 
         return HTMLSafe(html)
 
@@ -1037,12 +1037,12 @@ class HTMLSafe(object):
     def __str__(self):
         s = self.string
         if isinstance(s, str):
-            return s.encode('utf-8')
+            return s
         return s
     def __unicode__(self):
         s = self.string
         if isinstance(s, str):
-            return s.decode('utf-8')
+            return s
         return s
 
 def nl2br(string, options=None):
@@ -1219,7 +1219,7 @@ class AssetsBundle(object):
             content = '\n'.join(matches)
             if not self.css_errors:
                 self.set_cache('css', content)
-            content = content.encode('utf-8')
+            content = content
 
         return content
 
@@ -1228,7 +1228,7 @@ class AssetsBundle(object):
         if page_number:
             return content
         if content is None:
-            css = self.css().decode('utf-8')
+            css = self.css()
             re_rules = '([^{]+\{(?:[^{}]|\{[^{}]*\})*\})'
             re_selectors = '()(?:\s*@media\s*[^{]*\{)?(?:\s*(?:[^,{]*(?:,|\{(?:[^}]*\}))))'
             css_url = '@import url(\'/web/css.%%d/%s/%s\');' % (self.xmlid, self.version)
@@ -1274,7 +1274,7 @@ class AssetsBundle(object):
                     ira.unlink(self.cr, openerp.SUPERUSER_ID, oids, context=self.context)
                 url = url_prefix + self.version
                 ira.create(self.cr, openerp.SUPERUSER_ID, dict(
-                    datas=content.encode('utf8').encode('base64'),
+                    datas=content.encode('base64'),
                     type='binary',
                     name=url,
                     url=url,
@@ -1324,13 +1324,13 @@ class AssetsBundle(object):
             _logger.error(msg)
             self.css_errors.append(msg)
             return
-        result = compiler.communicate(input=source.encode('utf-8'))
+        result = compiler.communicate(input=source)
         if compiler.returncode:
             error = self.get_sass_error(''.join(result), source=source)
             _logger.warning(error)
             self.css_errors.append(error)
             return
-        compiled = result[0].strip().decode('utf8')
+        compiled = result[0].strip()
         fragments = self.rx_css_split.split(compiled)[1:]
         while fragments:
             asset_id = fragments.pop(0)
@@ -1416,7 +1416,7 @@ class WebAsset(object):
             self.stat()
             if self._filename:
                 with open(self._filename, 'rb') as fp:
-                    return fp.read().decode('utf-8')
+                    return fp.read()
             else:
                 return self._ir_attach['datas'].decode('base64')
         except UnicodeDecodeError:
@@ -1530,7 +1530,7 @@ class SassAsset(StylesheetAsset):
                                   context=self.context)
                     else:
                         ira.create(self.cr, openerp.SUPERUSER_ID, dict(
-                            datas=self.content.encode('utf8').encode('base64'),
+                            datas=self.content.encode('base64'),
                             mimetype='text/css',
                             type='binary',
                             name=url,

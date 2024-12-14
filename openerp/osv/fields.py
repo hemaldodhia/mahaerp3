@@ -64,7 +64,7 @@ def _symbol_set(symb):
     if symb is None or symb == False:
         return None
     elif isinstance(symb, str):
-        return symb.encode('utf-8')
+        return symb
     return str(symb)
 
 
@@ -331,7 +331,7 @@ def _symbol_set_char(self, symb):
     # we need to convert the string to a unicode object to be able
     # to evaluate its length (and possibly truncate it) reliably
     u_symb = tools.ustr(symb)
-    return u_symb[:self.size].encode('utf8')
+    return u_symb[:self.size]
 
 class char(_column):
     _type = 'char'

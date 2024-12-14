@@ -242,7 +242,7 @@ class rml_parse(object):
                 date = datetime_field.context_timestamp(self.cr, self.uid,
                                                         timestamp=date,
                                                         context=self.localcontext)
-            return date.strftime(date_format.encode('utf-8'))
+            return date.strftime(date_format)
 
         res = self.lang_dict['lang_obj'].format('%.' + str(digits) + 'f', value, grouping=grouping, monetary=monetary)
         if currency_obj:
@@ -481,7 +481,7 @@ class report_sxw(report_rml, preprocess.report):
         if rml_parser.logo:
             logo = base64.decodestring(rml_parser.logo)
         create_doc = self.generators[report_xml.report_type]
-        pdf = create_doc(etree.tostring(processed_rml),rml_parser.localcontext,logo,title.encode('utf8'))
+        pdf = create_doc(etree.tostring(processed_rml),rml_parser.localcontext,logo,title)
         return pdf, report_xml.report_type
 
     def create_single_odt(self, cr, uid, ids, data, report_xml, context=None):

@@ -3778,14 +3778,18 @@ class BaseModel(object, metaclass=MetaModel):
             field = self._fields.get(key)
             if field:
                 if field.column or field.inherited:
-                    old_vals[key] = val
+                    if isinstance(val, (bytes, bytearray)):
+                        old_vals[key] = str(val, encoding='UTF-8')
+                    else:
+                        old_vals[key] = val
+
                 if field.inverse and not field.inherited:
                     new_vals[key] = val
             else:
                 unknown.append(key)
 
         if unknown:
-            unknown = [uk.decode('utf-8') if isinstance(uk, bytes) else uk for uk in unknown]
+            unknown = [uk if isinstance(uk, bytes) else uk for uk in unknown]
             _logger.warning("%s.write() with unknown fields: %s", self._name, ', '.join(sorted(unknown)))
 
         # write old-style fields with (low-level) method _write
@@ -4099,7 +4103,7 @@ class BaseModel(object, metaclass=MetaModel):
             else:
                 unknown.append(key)
         if unknown:
-            unknown = [uk.decode('utf-8') if isinstance(uk, bytes) else uk for uk in unknown]
+            unknown = [uk if isinstance(uk, bytes) else uk for uk in unknown]
             _logger.warning("%s.create() with unknown fields: %s", self._name, ', '.join(sorted(unknown)))
 
         # create record with old-style fields
@@ -4247,7 +4251,7 @@ class BaseModel(object, metaclass=MetaModel):
                 ', '.join('"%s"' % u[0] for u in updates),
                 ', '.join(u[1] for u in updates)
             ),
-            tuple([isinstance(u[2], bytes) and u[2].decode('utf-8') or u[2] for u in updates if len(u) > 2])
+            tuple([isinstance(u[2], bytes) and u[2] or u[2] for u in updates if len(u) > 2])
         )
 
         id_new, = cr.fetchone()
@@ -4284,7 +4288,8 @@ class BaseModel(object, metaclass=MetaModel):
         recs.modified(self._fields)
 
         # call the 'set' method of fields which are not classic_write
-        upd_todo.sort(key=lambda x, y: self._columns[x].priority-self._columns[y].priority)
+        upd_todo.sort(key=lambda x: self._columns[x].priority)
+#        sorted(upd_todo, key=lambda x:self._columns[x].priority)
 
         # default element in context must be remove when call a one2many or many2many
         rel_context = context.copy()
@@ -4703,7 +4708,6 @@ class BaseModel(object, metaclass=MetaModel):
             cr.execute(query_str, where_clause_params)
             res = cr.fetchone()
             return res[0]
-
         limit_str = limit and ' limit %d' % limit or ''
         offset_str = offset and ' offset %d' % offset or ''
         query_str = 'SELECT "%s".id FROM ' % self._table + from_clause + where_str + order_by + limit_str + offset_str

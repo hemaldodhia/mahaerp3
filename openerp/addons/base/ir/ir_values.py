@@ -240,7 +240,7 @@ class ir_values(osv.osv):
            :return: id of the newly created ir.values entry
         """
         if isinstance(value, str):
-            value = value.encode('utf8')
+            value = value
         if company_id is True:
             # should be company-specific, need to get company id
             user = self.pool.get('res.users').browse(cr, uid, uid)
@@ -280,7 +280,7 @@ class ir_values(osv.osv):
             ('company_id','=', company_id)
             ]
         defaults = self.browse(cr, uid, self.search(cr, uid, search_criteria))
-        return pickle.loads(defaults[0].value.encode('utf-8')) if defaults else None
+        return pickle.loads(defaults[0].value) if defaults else None
 
     def get_defaults(self, cr, uid, model, condition=False):
         """Returns any default values that are defined for the current model and user,
@@ -333,7 +333,7 @@ class ir_values(osv.osv):
         defaults = {}
         for row in cr.dictfetchall():
             defaults.setdefault(row['name'],
-                (row['id'], row['name'], pickle.loads(row['value'].encode('utf-8'))))
+                (row['id'], row['name'], pickle.loads(row['value'])))
         return list(defaults.values())
 
     # use ormcache: this is called a lot by BaseModel.default_get()!
