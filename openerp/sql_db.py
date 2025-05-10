@@ -31,11 +31,15 @@ from contextlib import contextmanager
 from functools import wraps
 import logging
 import urllib.parse
+
+import time
 import uuid
+import psycopg2
 import psycopg2.extras
 import psycopg2.extensions
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT, ISOLATION_LEVEL_READ_COMMITTED, ISOLATION_LEVEL_REPEATABLE_READ
 from psycopg2.pool import PoolError
+from werkzeug import urls
 
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 
@@ -57,12 +61,14 @@ def undecimalize(symb, cr):
         return None
     return float(symb)
 
-for name, typeoid in list(types_mapping.items()):
+for name, typeoid in types_mapping.items():
     psycopg2.extensions.register_type(psycopg2.extensions.new_type(typeoid, name, lambda x, cr: x))
 psycopg2.extensions.register_type(psycopg2.extensions.new_type((700, 701, 1700,), 'float', undecimalize))
 
 
 from . import tools
+from .tools.func import frame_codeinfo
+from .tools import pycompat
 
 from .tools import parse_version as pv
 if pv(psycopg2.__version__) < pv('2.7'):
@@ -73,9 +79,9 @@ if pv(psycopg2.__version__) < pv('2.7'):
             raise ValueError("A string literal cannot contain NUL (0x00) characters.")
         return QuotedString(adapted)
 
-    psycopg2.extensions.register_adapter(str, adapt_string)
-    psycopg2.extensions.register_adapter(str, adapt_string)
-
+	for type_ in pycompat.string_types:
+        psycopg2.extensions.register_adapter(type_, adapt_string)
+    
 from .tools.func import frame_codeinfo
 from datetime import datetime as mdt
 from datetime import timedelta
@@ -204,16 +210,17 @@ class Cursor(object):
         self._default_log_exceptions = True
 
         self.cache = {}
-
+        # event handlers, see method after() below
+        self._event_handlers = {'commit': [], 'rollback': []}
     def __build_dict(self, row):
         return {d.name: row[i] for i, d in enumerate(self._obj.description)}
     def dictfetchone(self):
         row = self._obj.fetchone()
         return row and self.__build_dict(row)
     def dictfetchmany(self, size):
-        return list(map(self.__build_dict, self._obj.fetchmany(size)))
+        return [self.__build_dict(row) for row in self._obj.fetchmany(size)]
     def dictfetchall(self):
-        return list(map(self.__build_dict, self._obj.fetchall()))
+        return [self.__build_dict(row) for row in self._obj.fetchall()]
 
     def __del__(self):
         if not self._closed and not self._cnx.closed:
@@ -232,22 +239,16 @@ class Cursor(object):
 
     @check
     def execute(self, query, params=None, log_exceptions=None):
-        if '%d' in query or '%f' in query:
-            _logger.warning(query)
-            _logger.warning("SQL queries cannot contain %d or %f anymore. Use only %s", query)
+
         if params and not isinstance(params, (tuple, list, dict)):
-            _logger.error("SQL query parameters should be a tuple, list or dict; got %r", params)
+            # psycopg2's TypeError is not clear if you mess up the params
             raise ValueError("SQL query parameters should be a tuple, list or dict; got %r" % (params,))
 
         if self.sql_log:
-            now = mdt.now()
-        _logger.error("DB qeuery 1 %s ", query )
-        _logger.error("DB queury 2 %r ", params)
+            now = time.time()
+            _logger.debug("query: %s", query)
         try:
             params = params or None
-            _logger.error("DB qeuery 3 %s ", query )
-            _logger.error("DB queury 4  %r ", params)
-            _logger.error("DB queury 5  %r ", self._obj)
             res = self._obj.execute(query, params)
         except psycopg2.ProgrammingError as pe:
             _logger.error("SQL query parameters should be a tuple, list or dict; got %s", query )
@@ -267,8 +268,7 @@ class Cursor(object):
 
         # advanced stats only if sql_log is enabled
         if self.sql_log:
-            delay = mdt.now() - now
-            delay = delay.seconds * 1E6 + delay.microseconds
+            delay = (time.time() - now) * 1E6
 
             _logger.debug("query: %s", self._obj.query)
             res_from = re_from.match(query.lower())
@@ -283,10 +283,10 @@ class Cursor(object):
                 self.sql_into_log[res_into.group(1)][1] += delay
         return res
 
-    def split_for_in_conditions(self, ids):
+    def split_for_in_conditions(self, ids, size=None):
         """Split a list of identifiers into one or more smaller tuples
            safe for IN conditions, after uniquifying them."""
-        return tools.misc.split_every(self.IN_MAX, ids)
+        return tools.misc.split_every(size or self.IN_MAX, ids)
 
     def print_log(self):
         global sql_counter
@@ -297,11 +297,9 @@ class Cursor(object):
             sqllogs = {'from': self.sql_from_log, 'into': self.sql_into_log}
             sum = 0
             if sqllogs[type]:
-                sqllogitems = list(sqllogs[type].items())
-                sqllogitems.sort(key=lambda k: k[1][1])
+                sqllogitems = sqllogs[type].items()
                 _logger.debug("SQL LOG %s:", type)
-                sqllogitems.sort(lambda x, y: cmp(x[1][0], y[1][0]))
-                for r in sqllogitems:
+                for r in sorted(sqllogitems, key=lambda k: k[1]):
                     delay = timedelta(microseconds=r[1][1])
                     _logger.debug("table: %s: %s/%s", r[0], delay, r[1][0])
                     sum += r[1][1]
@@ -378,16 +376,44 @@ class Cursor(object):
         self._cnx.set_isolation_level(isolation_level)
 
     @check
+    def after(self, event, func):
+        """ Register an event handler.
+
+            :param event: the event, either `'commit'` or `'rollback'`
+            :param func: a callable object, called with no argument after the
+                event occurs
+
+            Be careful when coding an event handler, since any operation on the
+            cursor that was just committed/rolled back will take place in the
+            next transaction that has already begun, and may still be rolled
+            back or committed independently. You may consider the use of a
+            dedicated temporary cursor to do some database operation.
+        """
+        self._event_handlers[event].append(func)
+
+    def _pop_event_handlers(self):
+        # return the current handlers, and reset them on self
+        result = self._event_handlers
+        self._event_handlers = {'commit': [], 'rollback': []}
+        return result
+
+    @check
     def commit(self):
         """ Perform an SQL `COMMIT`
         """
-        return self._cnx.commit()
+        result = self._cnx.commit()
+        for func in self._pop_event_handlers()['commit']:
+            func()
+        return result
 
     @check
     def rollback(self):
         """ Perform an SQL `ROLLBACK`
         """
-        return self._cnx.rollback()
+        result = self._cnx.rollback()
+        for func in self._pop_event_handlers()['rollback']:
+            func()
+        return result
 
     def __enter__(self):
         """ Using the cursor as a contextmanager automatically commits and
@@ -414,10 +440,11 @@ class Cursor(object):
         self.execute('SAVEPOINT "%s"' % name)
         try:
             yield
-            self.execute('RELEASE SAVEPOINT "%s"' % name)
-        except:
+        except Exception:
             self.execute('ROLLBACK TO SAVEPOINT "%s"' % name)
             raise
+       else:
+            self.execute('RELEASE SAVEPOINT "%s"' % name)
 
     @check
     def __getattr__(self, name):

@@ -23,9 +23,12 @@
 # this is important for the openerp.api.guess() that relies on signatures
 from collections import defaultdict
 from decorator import decorator
-from inspect import getargspec
+from inspect import formatargspec, getargspec
 import logging
 
+from . import pycompat
+
+unsafe_eval = eval
 _logger = logging.getLogger(__name__)
 
 
@@ -58,6 +61,19 @@ class ormcache(object):
         lookup.clear_cache = self.clear
         return lookup
 
+    def determine_key(self):
+        """ Determine the function that computes a cache key from arguments. """
+        if self.skiparg is None:
+            # build a string that represents function code and evaluate it
+            args = formatargspec(*getargspec(self.method))[1:-1]
+            if self.args:
+                code = "lambda %s: (%s,)" % (args, ", ".join(self.args))
+            else:
+                code = "lambda %s: ()" % (args,)
+            self.key = unsafe_eval(code)
+        else:
+            # backward-compatible function that uses self.skiparg
+            self.key = lambda *args, **kwargs: args[self.skiparg:]
     def lru(self, model):
         counter = STAT[(model.pool.db_name, model._name, self.method)]
         return model.pool.cache, (model._name, self.method), counter
@@ -196,6 +212,13 @@ def log_ormcache_stats(sig=None, frame=None):
 
     me.dbname = me_dbname
 
+def get_cache_key_counter(bound_method, *args, **kwargs):
+    """ Return the cache, key and stat counter for the given call. """
+    model = bound_method.__self__
+    ormcache = bound_method.clear_cache.__self__
+    cache, key0, counter = ormcache.lru(model)
+    key = key0 + ormcache.key(model, *args, **kwargs)
+    return cache, key, counter
 # For backward compatibility
 cache = ormcache
 

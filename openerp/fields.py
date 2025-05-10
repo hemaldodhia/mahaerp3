@@ -21,13 +21,23 @@
 
 """ High-level objects for fields. """
 
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from datetime import date, datetime
 from functools import partial
 from operator import attrgetter
+import itertools
 import logging
 import pytz
 import xmlrpc.client
+
+
+try:
+    from xmlrpc.client import MAXINT
+except ImportError:
+    #pylint: disable=bad-python3-import
+    from xmlrpclib import MAXINT
+
+import psycopg2
 
 from openerp.sql_db import LazyCursor
 from openerp.tools import float_round, frozendict, html_sanitize, ustr, OrderedSet
@@ -39,7 +49,9 @@ DATE_LENGTH = len(date.today().strftime(DATE_FORMAT))
 DATETIME_LENGTH = len(datetime.now().strftime(DATETIME_FORMAT))
 EMPTY_DICT = frozendict()
 
+RENAMED_ATTRS = [('select', 'index'), ('digits_compute', 'digits')]
 _logger = logging.getLogger(__name__)
+_schema = logging.getLogger(__name__[:-7] + '.schema')
 
 class SpecialValue(object):
     """ Encapsulates a value in the cache in place of a normal value. """
@@ -105,6 +117,8 @@ class MetaField(type):
 
     def __init__(cls, name, bases, attrs):
         super(MetaField, cls).__init__(name, bases, attrs)
+        if not hasattr(cls, 'type'):
+            return
         if cls.type and cls.type not in MetaField.by_type:
             MetaField.by_type[cls.type] = cls
 
@@ -120,7 +134,7 @@ class MetaField(type):
             elif attr.startswith('_description_'):
                 cls.description_attrs.append((attr[13:], attr))
 
-
+_global_seq = iter(itertools.count())
 class Field(object, metaclass=MetaField):
     """ The field descriptor contains the field definition, and manages accesses
         and assignments of the corresponding field on records. The following
@@ -285,16 +299,24 @@ class Field(object, metaclass=MetaField):
 
     type = None                         # type of the field (string)
     relational = False                  # whether the field is a relational one
+    translate = False                   # whether the field is translated
+
+    column_type = None                  # database column type (ident, spec)
+    column_format = '%s'                # placeholder for value in queries
+    column_cast_from = ()               # column types that may be cast to this
 
     _slots = {
+        'args': EMPTY_DICT,             # the parameters given to __init__()    	
         '_attrs': EMPTY_DICT,           # dictionary of field attributes; it contains:
                                         #  - all attributes after __init__()
                                         #  - free attributes only after set_class_name()
+        '_module': None,                # the field's module name
 
         'automatic': False,             # whether the field is automatically created ("magic" field)
         'inherited': False,             # whether the field is inherited (_inherits)
         'column': None,                 # the column corresponding to the field
         'setup_done': False,            # whether the field has been set up
+		'_sequence': None,               # absolute ordering of the field
 
         'name': None,                   # name of the field
         'model_name': None,             # name of the model of this field
@@ -352,6 +374,14 @@ class Field(object, metaclass=MetaField):
             else:
                 self._attrs = {name: value}     # replace EMPTY_DICT
 
+    def set_all_attrs(self, attrs):
+        """ Set all field attributes at once (with slot defaults). """
+        # optimization: we assign slots only
+        assign = object.__setattr__
+        for key, val in self._slots.items():
+            assign(self, key, attrs.pop(key, val))
+        if attrs:
+            assign(self, '_attrs', attrs)
     def __delattr__(self, name):
         """ Remove non-slot field attribute. """
         try:
@@ -1258,6 +1288,8 @@ class Date(Field):
 
 class Datetime(Field):
     type = 'datetime'
+    column_type = ('timestamp', 'timestamp')
+    column_cast_from = ('date',)
 
     @staticmethod
     def now(*args):
@@ -1308,10 +1340,12 @@ class Datetime(Field):
         """ Convert a :class:`datetime` value into the format expected by the ORM. """
         return value.strftime(DATETIME_FORMAT) if value else False
 
+    def convert_to_column(self, value, record, values=None):
+        return super(Datetime, self).convert_to_column(value or None, record, values)
     def convert_to_cache(self, value, record, validate=True):
         if not value:
             return False
-        if isinstance(value, str):
+        if isinstance(value, pycompat.string_types):
             if validate:
                 # force parsing for validation
                 self.from_string(value)
@@ -1330,9 +1364,93 @@ class Datetime(Field):
         assert record, 'Record expected'
         return Datetime.to_string(Datetime.context_timestamp(record, Datetime.from_string(value)))
 
+# http://initd.org/psycopg/docs/usage.html#binary-adaptation
+# Received data is returned as buffer (in Python 2) or memoryview (in Python 3).
+_BINARY = memoryview
+if pycompat.PY2:
+    _BINARY = buffer #pylint: disable=buffer-builtin
 
 class Binary(Field):
     type = 'binary'
+    _slots = {
+        'prefetch': False,              # not prefetched by default
+        'context_dependent': True,      # depends on context (content or size)
+        'attachment': False,            # whether value is stored in attachment
+    }
+
+    @property
+    def column_type(self):
+        return None if self.attachment else ('bytea', 'bytea')
+
+    _description_attachment = property(attrgetter('attachment'))
+
+    def convert_to_column(self, value, record, values=None):
+        # Binary values may be byte strings (python 2.6 byte array), but
+        # the legacy OpenERP convention is to transfer and store binaries
+        # as base64-encoded strings. The base64 string may be provided as a
+        # unicode in some circumstances, hence the str() cast here.
+        # This str() coercion will only work for pure ASCII unicode strings,
+        # on purpose - non base64 data must be passed as a 8bit byte strings.
+        if not value:
+            return None
+        if isinstance(value, bytes):
+            return psycopg2.Binary(value)
+        return psycopg2.Binary(pycompat.text_type(value).encode('ascii'))
+
+    def convert_to_cache(self, value, record, validate=True):
+        if isinstance(value, _BINARY):
+            return bytes(value)
+        if isinstance(value, pycompat.integer_types) and \
+                (record._context.get('bin_size') or
+                 record._context.get('bin_size_' + self.name)):
+            # If the client requests only the size of the field, we return that
+            # instead of the content. Presumably a separate request will be done
+            # to read the actual content, if necessary.
+            return human_size(value)
+        return value
+
+    def read(self, records):
+        # values are stored in attachments, retrieve them
+        assert self.attachment
+        domain = [
+            ('res_model', '=', records._name),
+            ('res_field', '=', self.name),
+            ('res_id', 'in', records.ids),
+        ]
+        # Note: the 'bin_size' flag is handled by the field 'datas' itself
+        data = {att.res_id: att.datas
+                for att in records.env['ir.attachment'].sudo().search(domain)}
+        cache = records.env.cache
+        for record in records:
+            cache.set(record, self, data.get(record.id, False))
+
+    def write(self, records, value, create=False):
+        # retrieve the attachments that stores the value, and adapt them
+        assert self.attachment
+        if create:
+            atts = records.env['ir.attachment'].sudo()
+        else:
+            atts = records.env['ir.attachment'].sudo().search([
+                ('res_model', '=', records._name),
+                ('res_field', '=', self.name),
+                ('res_id', 'in', records.ids),
+            ])
+        with records.env.norecompute():
+            if value:
+                # update the existing attachments
+                atts.write({'datas': value})
+                # create the missing attachments
+                for record in (records - records.browse(atts.mapped('res_id'))):
+                    atts.create({
+                        'name': self.name,
+                        'res_model': record._name,
+                        'res_field': self.name,
+                        'res_id': record.id,
+                        'type': 'binary',
+                        'datas': value,
+                    })
+            else:
+                atts.unlink()
 
 
 class Selection(Field):

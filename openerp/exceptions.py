@@ -28,6 +28,11 @@ treated as a 'Server error'.
 If you consider introducing new exceptions, check out the test_exceptions addon.
 """
 
+import logging
+from inspect import currentframe
+from .tools.func import frame_codeinfo
+
+_logger = logging.getLogger(__name__)
 # kept for backward compatibility
 class except_orm(Exception):
     def __init__(self, name, value):

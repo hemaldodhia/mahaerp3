@@ -53,9 +53,14 @@ __all__ = [
     'Environment',
     'Meta', 'guess', 'noguess',
     'model', 'multi', 'one',
-    'cr', 'cr_context', 'cr_uid', 'cr_uid_context',
-    'cr_uid_id', 'cr_uid_id_context', 'cr_uid_ids', 'cr_uid_ids_context',
+    'model_cr', 'model_cr_context',
+    'cr', 'cr_context', 
+    'cr_uid', 'cr_uid_context',
+    'cr_uid_id', 'cr_uid_id_context', 
+    'cr_uid_ids', 'cr_uid_ids_context',
+    'cr_uid_records', 'cr_uid_records_context',
     'constrains', 'depends', 'onchange', 'returns',
+    'call_kw',
 ]
 
 import logging
@@ -66,6 +71,7 @@ from collections import defaultdict, MutableMapping
 from contextlib import contextmanager
 from pprint import pformat
 from weakref import WeakSet
+from decorator import decorator
 from werkzeug.local import Local, release_local
 
 from openerp.tools import frozendict, classproperty
@@ -90,6 +96,17 @@ WRAPPED_ATTRS = ('__module__', '__name__', '__doc__', '_constrains',
 INHERITED_ATTRS = ('_returns',)
 
 
+class Params(object):
+    def __init__(self, args, kwargs):
+        self.args = args
+        self.kwargs = kwargs
+    def __str__(self):
+        params = []
+        for arg in self.args:
+            params.append(repr(arg))
+        for item in sorted(self.kwargs.items()):
+            params.append("%s=%r" % item)
+        return ', '.join(params)
 class Meta(type):
     """ Metaclass that automatically decorates traditional-style methods by
         guessing their API. It also implements the inheritance of the
@@ -444,6 +461,49 @@ def one(method):
         return aggregate(self, result)
 
     return make_wrapper(one, method, old_api, new_api)
+    
+def model_cr(method):
+    """ Decorate a record-style method where ``self`` is a recordset, but its
+        contents is not relevant, only the model is. Such a method::
+
+            @api.model_cr
+            def method(self, args):
+                ...
+
+        may be called in both record and traditional styles, like::
+
+            # recs = model.browse(cr, uid, ids, context)
+            recs.method(args)
+
+            model.method(cr, args)
+
+        Notice that no ``uid``, ``ids``, ``context`` are passed to the method in
+        the traditional style.
+    """
+    method._api = 'model_cr'
+    return method
+
+
+def model_cr_context(method):
+    """ Decorate a record-style method where ``self`` is a recordset, but its
+        contents is not relevant, only the model is. Such a method::
+
+            @api.model_cr_context
+            def method(self, args):
+                ...
+
+        may be called in both record and traditional styles, like::
+
+            # recs = model.browse(cr, uid, ids, context)
+            recs.method(args)
+
+            model.method(cr, args, context=context)
+
+        Notice that no ``uid``, ``ids`` are passed to the method in the
+        traditional style.
+    """
+    method._api = 'model_cr_context'
+    return method
 
 
 def cr(method):
@@ -593,6 +653,42 @@ def cr_uid_ids_context(method):
         return upgrade(self, result, *args, **kwargs)
 
     return make_wrapper(cr_uid_ids_context, method, method, new_api)
+    
+def cr_uid_records(method):
+    """ Decorate a traditional-style method that takes ``cr``, ``uid``, a
+        recordset of model ``self`` as parameters. Such a method::
+
+            @api.cr_uid_records
+            def method(self, cr, uid, records, args):
+                ...
+
+        may be called in both record and traditional styles, like::
+
+            # records = model.browse(cr, uid, ids, context)
+            records.method(args)
+
+            model.method(cr, uid, records, args)
+    """
+    method._api = 'cr_uid_records'
+    return method
+
+def cr_uid_records_context(method):
+""" Decorate a traditional-style method that takes ``cr``, ``uid``, a
+    recordset of model ``self``, ``context`` as parameters. Such a method::
+
+        @api.cr_uid_records_context
+        def method(self, cr, uid, records, args, context=None):
+            ...
+
+    may be called in both record and traditional styles, like::
+
+        # records = model.browse(cr, uid, ids, context)
+        records.method(args)
+
+        model.method(cr, uid, records, args, context=context)
+"""
+	method._api = 'cr_uid_records_context'
+	return method
 
 
 def v7(method_v7):
@@ -717,6 +813,28 @@ def expected(decorator, func):
     return decorator(func) if not hasattr(func, '_api') else func
 
 
+def call_kw_model(method, self, args, kwargs):
+    context, args, kwargs = split_context(method, args, kwargs)
+    recs = self.with_context(context or {})
+    _logger.debug("call %s.%s(%s)", recs, method.__name__, Params(args, kwargs))
+    result = method(recs, *args, **kwargs)
+    return downgrade(method, result, recs, args, kwargs)
+
+def call_kw_multi(method, self, args, kwargs):
+    ids, args = args[0], args[1:]
+    context, args, kwargs = split_context(method, args, kwargs)
+    recs = self.with_context(context or {}).browse(ids)
+    _logger.debug("call %s.%s(%s)", recs, method.__name__, Params(args, kwargs))
+    result = method(recs, *args, **kwargs)
+    return downgrade(method, result, recs, args, kwargs)
+
+def call_kw(model, name, args, kwargs):
+    """ Invoke the given method ``name`` on the recordset ``model``. """
+    method = getattr(type(model), name)
+    if getattr(method, '_api', None) == 'model':
+        return call_kw_model(method, model, args, kwargs)
+    else:
+        return call_kw_multi(method, model, args, kwargs)
 
 class Environment(object):
     """ An environment wraps data for ORM records:
@@ -776,9 +894,32 @@ class Environment(object):
         envs.add(self)
         return self
 
+    #
+    # Mapping methods
+    #
+
+    def __contains__(self, model_name):
+        """ Test whether the given model exists. """
+        return model_name in self.registry
     def __getitem__(self, model_name):
         """ return a given model """
         return self.registry[model_name]._browse(self, ())
+    def __iter__(self):
+        """ Return an iterator on model names. """
+        return iter(self.registry)
+
+    def __len__(self):
+        """ Return the size of the model registry. """
+        return len(self.registry)
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __hash__(self):
+        return object.__hash__(self)
 
     def __call__(self, cr=None, user=None, context=None):
         """ Return an environment based on ``self`` with modified parameters.
@@ -995,6 +1136,150 @@ class Environments(object):
         return iter(self.envs)
 
 
+class Cache(object):
+    """ Implementation of the cache of records. """
+    def __init__(self):
+        # {field: {record_id: {key: value}}}
+        self._data = defaultdict(lambda: defaultdict(dict))
+
+    def contains(self, record, field):
+        """ Return whether ``record`` has a value for ``field``. """
+        key = field.cache_key(record)
+        return key in self._data[field].get(record.id, ())
+
+    def get(self, record, field):
+        """ Return the value of ``field`` for ``record``. """
+        key = field.cache_key(record)
+        value = self._data[field][record.id][key]
+        return value.get() if isinstance(value, SpecialValue) else value
+
+    def set(self, record, field, value):
+        """ Set the value of ``field`` for ``record``. """
+        key = field.cache_key(record)
+        self._data[field][record.id][key] = value
+
+    def remove(self, record, field):
+        """ Remove the value of ``field`` for ``record``. """
+        key = field.cache_key(record)
+        del self._data[field][record.id][key]
+
+    def contains_value(self, record, field):
+        """ Return whether ``record`` has a regular value for ``field``. """
+        key = field.cache_key(record)
+        value = self._data[field][record.id].get(key, SpecialValue(None))
+        return not isinstance(value, SpecialValue)
+
+    def get_value(self, record, field, default=None):
+        """ Return the regular value of ``field`` for ``record``. """
+        key = field.cache_key(record)
+        value = self._data[field][record.id].get(key, SpecialValue(None))
+        return default if isinstance(value, SpecialValue) else value
+
+    def set_special(self, record, field, getter):
+        """ Set the value of ``field`` for ``record`` to return ``getter()``. """
+        key = field.cache_key(record)
+        self._data[field][record.id][key] = SpecialValue(getter)
+
+    def set_failed(self, records, fields, exception):
+        """ Mark ``fields`` on ``records`` with the given exception. """
+        def getter():
+            raise exception
+        for field in fields:
+            for record in records:
+                self.set_special(record, field, getter)
+
+    def get_fields(self, record):
+        """ Return the fields with a value for ``record``. """
+        for name, field in record._fields.items():
+            key = field.cache_key(record)
+            if name != 'id' and key in self._data[field].get(record.id, ()):
+                yield field
+
+    def get_records(self, model, field):
+        """ Return the records of ``model`` that have a value for ``field``. """
+        key = field.cache_key(model)
+        # optimization: do not field.cache_key(record) for each record in cache
+        ids = [
+            record_id
+            for record_id, field_record_cache in self._data[field].items()
+            if key in field_record_cache
+        ]
+        return model.browse(ids)
+
+    def get_missing_ids(self, records, field):
+        """ Return the ids of ``records`` that have no value for ``field``. """
+        key = field.cache_key(records)
+        field_cache = self._data[field]
+        for record_id in records._ids:
+            if key not in field_cache.get(record_id, ()):
+                yield record_id
+
+    def copy(self, records, env):
+        """ Copy the cache of ``records`` to ``env``. """
+        src = records
+        dst = records.with_env(env)
+        for field, field_cache in self._data.items():
+            src_key = field.cache_key(src)
+            dst_key = field.cache_key(dst)
+            for record_cache in field_cache.values():
+                if src_key in record_cache and not isinstance(record_cache[src_key], SpecialValue):
+                    # But not if it's a SpecialValue, which often is an access error
+                    # because the other environment (eg. sudo()) is well expected to have access.
+                    record_cache[dst_key] = record_cache[src_key]
+
+    def invalidate(self, spec=None):
+        """ Invalidate the cache, partially or totally depending on ``spec``. """
+        if spec is None:
+            self._data.clear()
+        elif spec:
+            data = self._data
+            for field, ids in spec:
+                if ids is None:
+                    data.pop(field, None)
+                else:
+                    field_cache = data[field]
+                    for id in ids:
+                        field_cache.pop(id, None)
+
+    def check(self, env):
+        """ Check the consistency of the cache for the given environment. """
+        # make a full copy of the cache, and invalidate it
+        dump = defaultdict(dict)
+        for field, field_cache in self._data.items():
+            browse = env[field.model_name].browse
+            for record_id, field_record_cache in field_cache.items():
+                if record_id:
+                    key = field.cache_key(browse(record_id))
+                    if key in field_record_cache:
+                        dump[field][record_id] = field_record_cache[key]
+
+        self.invalidate()
+
+        # re-fetch the records, and compare with their former cache
+        invalids = []
+        for field, field_dump in dump.items():
+            records = env[field.model_name].browse(field_dump)
+            for record in records:
+                try:
+                    cached = field_dump[record.id]
+                    cached = cached.get() if isinstance(cached, SpecialValue) else cached
+                    value = field.convert_to_record(cached, record)
+                    fetched = record[field.name]
+                    if fetched != value:
+                        info = {'cached': value, 'fetched': fetched}
+                        invalids.append((record, field, info))
+                except (AccessError, MissingError):
+                    pass
+
+        if invalids:
+            raise UserError('Invalid cache for fields\n' + pformat(invalids))
+
+class SpecialValue(object):
+    """ Wrapper for a function to get the cached value of a field. """
+    __slots__ = ['get']
+
+    def __init__(self, getter):
+        self.get = getter
 # keep those imports here in order to handle cyclic dependencies correctly
 from openerp import SUPERUSER_ID
 from openerp.exceptions import Warning, AccessError, MissingError

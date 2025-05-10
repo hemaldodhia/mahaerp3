@@ -7,6 +7,7 @@
 
 See <http://github.com/ActiveState/appdirs> for details and usage.
 """
+from __future__ import print_function
 # Dev Notes:
 # - MSDN on where to store app data files:
 #   http://support.microsoft.com/default.aspx?scid=kb;en-us;310294#XSLTH3194121123120121120120
@@ -392,7 +393,7 @@ def _get_win_folder_with_pywin32(csidl_name):
     # not return unicode strings when there is unicode data in the
     # path.
     try:
-        dir = str(dir)
+        dir = pycompat.text_type(dir)
 
         # Downgrade to short path name if have highbit chars. See
         # <http://bugs.activestate.com/show_bug.cgi?id=85099>.
@@ -463,15 +464,15 @@ if __name__ == "__main__":
     print("-- app dirs (with optional 'version')")
     dirs = AppDirs(appname, appauthor, version="1.0")
     for prop in props:
-        print(("%s: %s" % (prop, getattr(dirs, prop))))
+        print("%s: %s" % (prop, getattr(dirs, prop)))
 
     print("\n-- app dirs (without optional 'version')")
     dirs = AppDirs(appname, appauthor)
     for prop in props:
-        print(("%s: %s" % (prop, getattr(dirs, prop))))
+        print("%s: %s" % (prop, getattr(dirs, prop)))
 
     print("\n-- app dirs (without optional 'appauthor')")
     dirs = AppDirs(appname)
     for prop in props:
-        print(("%s: %s" % (prop, getattr(dirs, prop))))
+        print("%s: %s" % (prop, getattr(dirs, prop)))
 
