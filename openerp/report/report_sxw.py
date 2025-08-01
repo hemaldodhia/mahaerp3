@@ -1,37 +1,20 @@
 # -*- coding: utf-8 -*-
-##############################################################################
-#
-#    OpenERP, Open Source Management Solution
-#    Copyright (C) 2004-2009 Tiny SPRL (<http://tiny.be>).
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as
-#    published by the Free Software Foundation, either version 3 of the
-#    License, or (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-#
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 from lxml import etree
-import io
-import io
+import StringIO
+import cStringIO
 import base64
 from datetime import datetime
 import os
 import re
 import time
-from .interface import report_rml
-from . import preprocess
+from interface import report_rml
+import preprocess
 import logging
 import openerp.tools as tools
 import zipfile
-from . import common
+import common
+from openerp.exceptions import AccessError
 
 import openerp
 from openerp import SUPERUSER_ID
@@ -199,20 +182,15 @@ class rml_parse(object):
         return d
 
     def formatLang(self, value, digits=None, date=False, date_time=False, grouping=True, monetary=False, dp=False, currency_obj=False):
-        """
-            Assuming 'Account' decimal.precision=3:
-                formatLang(value) -> digits=2 (default)
-                formatLang(value, digits=4) -> digits=4
-                formatLang(value, dp='Account') -> digits=3
-                formatLang(value, digits=5, dp='Account') -> digits=5
-        """
         if digits is None:
             if dp:
                 digits = self.get_digits(dp=dp)
+            elif currency_obj:
+                digits = currency_obj.decimal_places
             else:
                 digits = self.get_digits(value)
 
-        if isinstance(value, str) and not value:
+        if isinstance(value, (str, unicode)) and not value:
             return ''
 
         if not self.lang_dict_called:
@@ -229,7 +207,7 @@ class rml_parse(object):
                 value = value.split('.')[0]
                 date_format = date_format + " " + self.lang_dict['time_format']
                 parse_format = DEFAULT_SERVER_DATETIME_FORMAT
-            if isinstance(value, str):
+            if isinstance(value, basestring):
                 # FIXME: the trimming is probably unreliable if format includes day/month names
                 #        and those would need to be translated anyway.
                 date = datetime.strptime(value[:get_date_length(parse_format)], parse_format)
@@ -242,14 +220,14 @@ class rml_parse(object):
                 date = datetime_field.context_timestamp(self.cr, self.uid,
                                                         timestamp=date,
                                                         context=self.localcontext)
-            return date.strftime(date_format)
+            return date.strftime(date_format.encode('utf-8'))
 
         res = self.lang_dict['lang_obj'].format('%.' + str(digits) + 'f', value, grouping=grouping, monetary=monetary)
-        if currency_obj:
+        if currency_obj and currency_obj.symbol:
             if currency_obj.position == 'after':
-                res = '%s\N{NO-BREAK SPACE}%s' % (res, currency_obj.symbol)
+                res = u'%s\N{NO-BREAK SPACE}%s' % (res, currency_obj.symbol)
             elif currency_obj and currency_obj.position == 'before':
-                res = '%s\N{NO-BREAK SPACE}%s' % (currency_obj.symbol, res)
+                res = u'%s\N{NO-BREAK SPACE}%s' % (currency_obj.symbol, res)
         return res
 
     def display_address(self, address_record, without_company=False):
@@ -367,7 +345,7 @@ class report_sxw(report_rml, preprocess.report):
                 report_type= data.get('report_type', 'pdf')
                 class a(object):
                     def __init__(self, *args, **argv):
-                        for key,arg in list(argv.items()):
+                        for key,arg in argv.items():
                             setattr(self, key, arg)
                 report_xml = a(title=title, report_type=report_type, report_rml_content=rml, name=title, attachment=False, header=self.header)
             finally:
@@ -444,19 +422,19 @@ class report_sxw(report_rml, preprocess.report):
                             'res_id': obj.id,
                             }, context=ctx
                         )
-                    except Exception:
+                    except AccessError:
                         #TODO: should probably raise a proper osv_except instead, shouldn't we? see LP bug #325632
-                        _logger.error('Could not create saved report attachment', exc_info=True)
+                        _logger.info('Could not create saved report attachment', exc_info=True)
                 results.append(result)
             if results:
                 if results[0][1]=='pdf':
                     from pyPdf import PdfFileWriter, PdfFileReader
                     output = PdfFileWriter()
                     for r in results:
-                        reader = PdfFileReader(io.StringIO(r[0]))
+                        reader = PdfFileReader(cStringIO.StringIO(r[0]))
                         for page in range(reader.getNumPages()):
                             output.addPage(reader.getPage(page))
-                    s = io.StringIO()
+                    s = cStringIO.StringIO()
                     output.write(s)
                     return s.getvalue(), results[0][1]
         return self.create_single_pdf(cr, uid, ids, data, report_xml, context)
@@ -481,7 +459,7 @@ class report_sxw(report_rml, preprocess.report):
         if rml_parser.logo:
             logo = base64.decodestring(rml_parser.logo)
         create_doc = self.generators[report_xml.report_type]
-        pdf = create_doc(etree.tostring(processed_rml),rml_parser.localcontext,logo,title)
+        pdf = create_doc(etree.tostring(processed_rml),rml_parser.localcontext,logo,title.encode('utf8'))
         return pdf, report_xml.report_type
 
     def create_single_odt(self, cr, uid, ids, data, report_xml, context=None):
@@ -489,14 +467,14 @@ class report_sxw(report_rml, preprocess.report):
         context['parents'] = sxw_parents
         report_type = report_xml.report_type
         binary_report_content = report_xml.report_sxw_content
-        if isinstance(report_xml.report_sxw_content, str):
+        if isinstance(report_xml.report_sxw_content, unicode):
             # if binary content was passed as unicode, we must
             # re-encode it as a 8-bit string using the pass-through
             # 'latin1' encoding, to restore the original byte values.
             # See also osv.fields.sanitize_binary_value()
             binary_report_content = report_xml.report_sxw_content.encode("latin1")
 
-        sxw_io = io.StringIO(binary_report_content)
+        sxw_io = StringIO.StringIO(binary_report_content)
         sxw_z = zipfile.ZipFile(sxw_io, mode='r')
         rml = sxw_z.read('content.xml')
         meta = sxw_z.read('meta.xml')
@@ -590,14 +568,14 @@ class report_sxw(report_rml, preprocess.report):
                 rml_file.close()
 
         #created empty zip writing sxw contents to avoid duplication
-        sxw_out = io.StringIO()
+        sxw_out = StringIO.StringIO()
         sxw_out_zip = zipfile.ZipFile(sxw_out, mode='w')
         sxw_template_zip = zipfile.ZipFile (sxw_io, 'r')
         for item in sxw_template_zip.infolist():
             if item.filename not in sxw_contents:
                 buffer = sxw_template_zip.read(item.filename)
                 sxw_out_zip.writestr(item.filename, buffer)
-        for item_filename, buffer in sxw_contents.items():
+        for item_filename, buffer in sxw_contents.iteritems():
             sxw_out_zip.writestr(item_filename, buffer)
         sxw_template_zip.close()
         sxw_out_zip.close()
@@ -634,6 +612,3 @@ class report_sxw(report_rml, preprocess.report):
         create_doc = self.generators['makohtml2html']
         html = create_doc(mako_html,html_parser.localcontext)
         return html,'html'
-
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:

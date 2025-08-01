@@ -1,24 +1,5 @@
 # -*- coding: utf-8 -*-
-##############################################################################
-#
-# Copyright (C) 2003, Fabien Pinckaers, UCL, FSA
-# Copyright (C) 2004-2009 Tiny SPRL (<http://tiny.be>).
-#
-# This library is free software; you can redistribute it and/or
-# modify it under the terms of the GNU Lesser General Public
-# License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
-#
-# This library is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# Lesser General Public License for more details.
-#
-# You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import copy
 import locale
@@ -53,8 +34,8 @@ def _child_get(node, self=None, tagname=None):
                             eval(n.get('rml_except'), {}, self.localcontext)
                         except GeneratorExit:
                             continue
-                        except Exception as e:
-                            _logger.warning('rml_except: "%s"', n.get('rml_except',''), exc_info=True)
+                        except Exception, e:
+                            _logger.info('rml_except: "%s"', n.get('rml_except',''), exc_info=True)
                             continue
                     if n.get('rml_tag'):
                         try:
@@ -65,8 +46,8 @@ def _child_get(node, self=None, tagname=None):
                             yield n2
                         except GeneratorExit:
                             yield n
-                        except Exception as e:
-                            _logger.warning('rml_tag: "%s"', n.get('rml_tag',''), exc_info=True)
+                        except Exception, e:
+                            _logger.info('rml_tag: "%s"', n.get('rml_tag',''), exc_info=True)
                             yield n
                     else:
                         yield n
@@ -76,8 +57,8 @@ def _child_get(node, self=None, tagname=None):
                 eval(n.get('rml_except'), {}, self.localcontext)
             except GeneratorExit:
                 continue
-            except Exception as e:
-                _logger.warning('rml_except: "%s"', n.get('rml_except',''), exc_info=True)
+            except Exception, e:
+                _logger.info('rml_except: "%s"', n.get('rml_except',''), exc_info=True)
                 continue
         if self and self.localcontext and n.get('rml_tag'):
             try:
@@ -89,8 +70,8 @@ def _child_get(node, self=None, tagname=None):
                 tagname = ''
             except GeneratorExit:
                 pass
-            except Exception as e:
-                _logger.warning('rml_tag: "%s"', n.get('rml_tag',''), exc_info=True)
+            except Exception, e:
+                _logger.info('rml_tag: "%s"', n.get('rml_tag',''), exc_info=True)
                 pass
         if (tagname is None) or (n.tag==tagname):
             yield n
@@ -119,11 +100,11 @@ def _process_text(self, txt):
                 try:
                     expr = sps.pop(0)
                     txt = eval(expr, self.localcontext)
-                    if txt and isinstance(txt, str):
+                    if txt and isinstance(txt, basestring):
                         txt = tools.ustr(txt)
                 except Exception:
-                    _logger.error("Failed to evaluate expression [[ %s ]] with context %r while rendering report, ignored.", expr, self.localcontext)
-                if isinstance(txt, str):
+                    _logger.info("Failed to evaluate expression [[ %s ]] with context %r while rendering report, ignored.", expr, self.localcontext)
+                if isinstance(txt, basestring):
                     result += txt
                 elif txt and (txt is not None) and (txt is not False):
                     result += ustr(txt)
@@ -160,7 +141,7 @@ def unit_get(size):
 def tuple_int_get(node, attr_name, default=None):
     if not node.get(attr_name):
         return default
-    return list(map(int, node.get(attr_name).split(',')))
+    return map(int, node.get(attr_name).split(','))
 
 def bool_get(value):
     return (str(value)=="1") or (value.lower()=='yes')
@@ -185,5 +166,3 @@ def attr_get(node, attrs, dict=None):
             elif dict[key] == 'float' :
                 res[key] = float(node.get(key))
     return res
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:

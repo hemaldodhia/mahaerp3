@@ -1,23 +1,5 @@
 # -*- coding: utf-8 -*-
-##############################################################################
-#
-#    OpenERP, Open Source Management Solution
-#    Copyright (C) 2004-2009 Tiny SPRL (<http://tiny.be>).
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as
-#    published by the Free Software Foundation, either version 3 of the
-#    License, or (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-#
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import os
 import re
@@ -27,9 +9,9 @@ from lxml import etree
 import openerp
 import openerp.tools as tools
 import openerp.modules
-from . import print_xml
-from . import render
-import urllib.request, urllib.parse, urllib.error
+import print_xml
+import render
+import urllib
 
 from openerp import SUPERUSER_ID
 from openerp.report.render.rml2pdf import customfonts
@@ -94,7 +76,7 @@ class report_rml(report_int):
     def create(self, cr, uid, ids, datas, context):
         registry = openerp.registry(cr.dbname)
         xml = self.create_xml(cr, uid, ids, datas, context)
-        xml = tools.ustr(xml)
+        xml = tools.ustr(xml).encode('utf8')
         report_type = datas.get('report_type', 'pdf')
         if report_type == 'raw':
             return xml, report_type
@@ -126,8 +108,8 @@ class report_rml(report_int):
         # find the position of the 3rd tag
         # (skip the <?xml ...?> and the "root" tag)
         iter = re.finditer('<[^>]*>', xml)
-        i = next(iter)
-        i = next(iter)
+        i = iter.next()
+        i = iter.next()
         pos_xml = i.end()
 
         doc = print_xml.document(cr, uid, {}, {})
@@ -138,7 +120,7 @@ class report_rml(report_int):
 
         # find the position of the tag after the <?xml ...?> tag
         iter = re.finditer('<[^>]*>', corporate_header)
-        i = next(iter)
+        i = iter.next()
         pos_header = i.end()
 
         return xml[:pos_xml] + corporate_header[pos_header:] + xml[pos_xml:]
@@ -166,7 +148,7 @@ class report_rml(report_int):
                 if 'href' in import_child.attrib:
                     imp_file = import_child.get('href')
                     _, imp_file = tools.file_open(imp_file, subdir=xsl_path, pathinfo=True)
-                    import_child.set('href', urllib.parse.quote(str(imp_file)))
+                    import_child.set('href', urllib.quote(str(imp_file)))
                     imp_file.close()
         finally:
             stylesheet_file.close()
@@ -229,7 +211,7 @@ class report_rml(report_int):
     def create_txt(self, rml,localcontext, logo=None, title=None):
         obj = render.rml2txt(rml, localcontext, self.bin_datas)
         obj.render()
-        return obj.get()
+        return obj.get().encode('utf-8')
 
     def create_html2html(self, rml, localcontext = None, logo=None, title=None):
         obj = render.html2html(rml, localcontext, self.bin_datas)
@@ -263,5 +245,3 @@ class report_rml(report_int):
             'addons',
             tools.config['root_path']
         ]
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:

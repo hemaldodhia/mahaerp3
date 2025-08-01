@@ -1,29 +1,11 @@
 # -*- coding: utf-8 -*-
-##############################################################################
-#    
-#    OpenERP, Open Source Management Solution
-#    Copyright (C) 2004-2009 Tiny SPRL (<http://tiny.be>).
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as
-#    published by the Free Software Foundation, either version 3 of the
-#    License, or (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-#
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.     
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from lxml import etree
 import openerp
 import openerp.tools as tools
 from openerp.tools.safe_eval import safe_eval
-from . import print_fnc
+import print_fnc
 from openerp.osv.orm import BaseModel
 
 class InheritDict(dict):
@@ -43,11 +25,11 @@ class InheritDict(dict):
 
 def tounicode(val):
     if isinstance(val, str):
-        unicode_val = str(val, 'utf-8')
-    elif isinstance(val, str):
+        unicode_val = unicode(val, 'utf-8')
+    elif isinstance(val, unicode):
         unicode_val = val
     else:
-        unicode_val = str(val)
+        unicode_val = unicode(val)
     return unicode_val
 
 class document(object):
@@ -114,7 +96,7 @@ class document(object):
                     el = etree.SubElement(parent, node.tag)
                     el.text = tounicode(value)
 #TODO: test this
-                    for key, value in attrs.items():
+                    for key, value in attrs.iteritems():
                         if key not in ('type', 'name', 'default'):
                             el.set(key, value)
 
@@ -132,7 +114,7 @@ class document(object):
                         ext = fname.split('.')[-1].lower()
                         if ext in ('jpg','jpeg', 'png'):
                             import base64
-                            from io import StringIO
+                            from StringIO import StringIO
                             dt = base64.decodestring(datas['datas'])
                             fp = StringIO()
                             fp.write(dt)
@@ -168,7 +150,7 @@ class document(object):
                         if not value in vals:
                             vals[value]=[]
                         vals[value].append(b)
-                    keys = list(vals.keys())
+                    keys = vals.keys()
                     keys.sort()
 
                     if 'order' in attrs and attrs['order']=='desc':
@@ -207,7 +189,7 @@ class document(object):
                             el = etree.SubElement(parent, node.tag)
                             atr = self.node_attrs_get(node)
                             if 'value' in atr:
-                                if not isinstance(datas[atr['value']], str):
+                                if not isinstance(datas[atr['value']], (str, unicode)):
                                     txt = str(datas[atr['value']])
                                 else:
                                     txt = datas[atr['value']]
@@ -272,7 +254,3 @@ class document(object):
     def close(self):
         self.doc = None
         self.dom = None
-
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:
-

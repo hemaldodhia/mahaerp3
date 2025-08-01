@@ -1,23 +1,5 @@
 # -*- coding: utf-8 -*-
-##############################################################################
-#
-#    OpenERP, Open Source Management Solution
-#    Copyright (C) 2004-2009 Tiny SPRL (<http://tiny.be>).
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as
-#    published by the Free Software Foundation, either version 3 of the
-#    License, or (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-#
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import openerp
 from openerp.report.interface import report_int
@@ -98,7 +80,7 @@ class report_printscreen_list(report_int):
                         if self.groupby_no_leaf:
                             continue
                         child_ids = model.search(cr, uid, inner_domain)
-                        res = model.read(cr, uid, child_ids, list(result['fields'].keys()), context)
+                        res = model.read(cr, uid, child_ids, result['fields'].keys(), context)
                         res.sort(lambda x,y: cmp(ids.index(x['id']), ids.index(y['id'])))
                         rows.extend(res)
             dom = [('id','in',ids)]
@@ -106,8 +88,8 @@ class report_printscreen_list(report_int):
                 dom = datas.get('_domain',[])
             get_groupby_data(self.groupby, dom)
         else:
-            rows = model.read(cr, uid, datas['ids'], list(result['fields'].keys()), context)
-            ids2 = list(map(itemgetter('id'), rows)) # getting the ids from read result
+            rows = model.read(cr, uid, datas['ids'], result['fields'].keys(), context)
+            ids2 = map(itemgetter('id'), rows) # getting the ids from read result
             if datas['ids'] != ids2: # sorted ids were not taken into consideration for print screen
                 rows_new = []
                 for id in datas['ids']:
@@ -268,6 +250,3 @@ class report_printscreen_list(report_int):
         self.obj.render()
         return True
 report_printscreen_list('report.printscreen.list')
-
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:

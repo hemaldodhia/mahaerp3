@@ -1,23 +1,5 @@
 # -*- coding: utf-8 -*-
-##############################################################################
-#    
-#    OpenERP, Open Source Management Solution
-#    Copyright (C) 2004-2009 Tiny SPRL (<http://tiny.be>).
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as
-#    published by the Free Software Foundation, either version 3 of the
-#    License, or (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-#
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.     
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import os
 import time
@@ -25,18 +7,17 @@ import time
 import openerp
 import openerp.tools as tools
 from openerp.tools.safe_eval import safe_eval as eval
-from . import print_xml
-from . import render
-from .interface import report_int
-from . import common
-from openerp.osv.osv import except_osv
+import print_xml
+import render
+from interface import report_int
+import common
 from openerp.osv.orm import BaseModel
 from pychart import *
-from . import misc
-import io
+import misc
+import cStringIO
 from lxml import etree
 from openerp.tools.translate import _
-from functools import reduce
+from openerp.exceptions import UserError
 
 class external_pdf(render.render):
     def __init__(self, pdf):
@@ -97,13 +78,13 @@ class report_custom(report_int):
                 # Process group_by data first
                 key = []
                 if group_by is not None and fields[group_by] is not None:
-                    if fields[group_by][0] in list(levels.keys()):
+                    if fields[group_by][0] in levels.keys():
                         key.append(fields[group_by][0])
-                    for l in list(levels.keys()):
+                    for l in levels.keys():
                         if l != fields[group_by][0]:
                             key.append(l)
                 else:
-                    key = list(levels.keys())
+                    key = levels.keys()
                 for l in key:
                     objs = eval('obj.'+l,{'obj': obj})
                     if not isinstance(objs, (BaseModel, list)):
@@ -202,12 +183,12 @@ class report_custom(report_int):
             results = self._row_get(cr, uid,objs, new_fields, new_cond, group_by=groupby)
 
         fct = {
-            'calc_sum': lambda l: reduce(lambda x,y: float(x)+float(y), [_f for _f in l if _f], 0),
-            'calc_avg': lambda l: reduce(lambda x,y: float(x)+float(y), [_f for _f in l if _f], 0) / (len([_f for _f in l if _f]) or 1.0),
+            'calc_sum': lambda l: reduce(lambda x,y: float(x)+float(y), filter(None, l), 0),
+            'calc_avg': lambda l: reduce(lambda x,y: float(x)+float(y), filter(None, l), 0) / (len(filter(None, l)) or 1.0),
             'calc_max': lambda l: reduce(lambda x,y: max(x,y), [(i or 0.0) for i in l], 0),
             'calc_min': lambda l: reduce(lambda x,y: min(x,y), [(i or 0.0) for i in l], 0),
-            'calc_count': lambda l: len([_f for _f in l if _f]),
-            'False': lambda l: '\r\n'.join([_f for _f in l if _f]),
+            'calc_count': lambda l: len(filter(None, l)),
+            'False': lambda l: '\r\n'.join(filter(None, l)),
             'groupby': lambda l: reduce(lambda x,y: x or y, l)
         }
         new_res = []
@@ -224,13 +205,13 @@ class report_custom(report_int):
                     res_dic[line[groupby]].append(line)
 
             #we use the keys in results since they are ordered, whereas in res_dic.heys() they aren't
-            for key in [_f for _f in [x[groupby] for x in results] if _f]:
+            for key in filter(None, [x[groupby] for x in results]):
                 row = []
                 for col in range(len(fields)):
                     if col == groupby:
-                        row.append(fct['groupby']([x[col] for x in res_dic[key]]))
+                        row.append(fct['groupby'](map(lambda x: x[col], res_dic[key])))
                     else:
-                        row.append(fct[str(fields[col]['operation'])]([x[col] for x in res_dic[key]]))
+                        row.append(fct[str(fields[col]['operation'])](map(lambda x: x[col], res_dic[key])))
                 new_res.append(row)
             results = new_res
         
@@ -302,7 +283,7 @@ class report_custom(report_int):
             if not f['width']:
                 f['width']=round((float(length)/count)-0.5)
 
-        _append_node('tableSize', '%s' %  ','.join(['%.2fmm' % (x['width'],) for x in fields]))
+        _append_node('tableSize', '%s' %  ','.join(map(lambda x: '%.2fmm' % (x['width'],), fields)))
         _append_node('report-header', '%s' % (report['title'],))
         _append_node('report-footer', '%s' % (report['footer'],))
 
@@ -341,7 +322,7 @@ class report_custom(report_int):
 
     def _create_lines(self, cr, uid, ids, report, fields, results, context):
         pool = openerp.registry(cr.dbname)
-        pdf_string = io.StringIO()
+        pdf_string = cStringIO.StringIO()
         can = canvas.init(fname=pdf_string, format='pdf')
         
         can.show(80,380,'/16/H'+report['title'])
@@ -349,7 +330,7 @@ class report_custom(report_int):
         ar = area.T(size=(350,350),
         #x_coord = category_coord.T(['2005-09-01','2005-10-22'],0),
         x_axis = axis.X(label = fields[0]['name'], format="/a-30{}%s"),
-        y_axis = axis.Y(label = ', '.join([x['name'] for x in fields[1:]])))
+        y_axis = axis.Y(label = ', '.join(map(lambda x : x['name'], fields[1:]))))
         
         process_date = {
             'D': lambda x: reduce(lambda xx, yy: xx + '-' + yy, x.split('-')[1:3]),
@@ -397,9 +378,9 @@ class report_custom(report_int):
 
         idx0 = 0
         nb_bar = len(data_by_year)*(len(fields)-1)
-        colors = [line_style.T(color=x) for x in misc.choice_colors(nb_bar)]
+        colors = map(lambda x:line_style.T(color=x), misc.choice_colors(nb_bar))
         abscissa = {}
-        for line in list(data_by_year.keys()):
+        for line in data_by_year.keys():
             fields_bar = []
             # sum data and save it in a list. An item for a fields
             for d in data_by_year[line]:
@@ -411,14 +392,14 @@ class report_custom(report_int):
                         fields_bar[idx][d[0]] = d[idx+1]
             for idx  in range(len(fields)-1):
                 data = {}
-                for k in list(fields_bar[idx].keys()):
+                for k in fields_bar[idx].keys():
                     if k in data:
                         data[k] += fields_bar[idx][k]
                     else:
                         data[k] = fields_bar[idx][k]
                 data_cum = []
                 prev = 0.0
-                keys = list(data.keys())
+                keys = data.keys()
                 keys.sort()
                 # cumulate if necessary
                 for k in keys:
@@ -431,7 +412,7 @@ class report_custom(report_int):
                 abscissa.update(fields_bar[idx])
                 idx0 += 1
         
-        abscissa = [[x, None] for x in abscissa]
+        abscissa = map(lambda x : [x, None], abscissa)
         ar.x_coord = category_coord.T(abscissa,0)
         ar.draw(can)
 
@@ -445,7 +426,7 @@ class report_custom(report_int):
 
     def _create_bars(self, cr, uid, ids, report, fields, results, context):
         pool = openerp.registry(cr.dbname)
-        pdf_string = io.StringIO()
+        pdf_string = cStringIO.StringIO()
         can = canvas.init(fname=pdf_string, format='pdf')
         
         can.show(80,380,'/16/H'+report['title'])
@@ -464,7 +445,7 @@ class report_custom(report_int):
 
         ar = area.T(size=(350,350),
             x_axis = axis.X(label = fields[0]['name'], format="/a-30{}%s"),
-            y_axis = axis.Y(label = ', '.join([x['name'] for x in fields[1:]])))
+            y_axis = axis.Y(label = ', '.join(map(lambda x : x['name'], fields[1:]))))
 
         idx = 0 
         date_idx = None
@@ -498,10 +479,10 @@ class report_custom(report_int):
 
 
         nb_bar = len(data_by_year)*(len(fields)-1)
-        colors = [fill_style.Plain(bgcolor=x) for x in misc.choice_colors(nb_bar)]
+        colors = map(lambda x:fill_style.Plain(bgcolor=x), misc.choice_colors(nb_bar))
         
         abscissa = {}
-        for line in list(data_by_year.keys()):
+        for line in data_by_year.keys():
             fields_bar = []
             # sum data and save it in a list. An item for a fields
             for d in data_by_year[line]:
@@ -513,14 +494,14 @@ class report_custom(report_int):
                         fields_bar[idx][d[0]] = d[idx+1]
             for idx  in range(len(fields)-1):
                 data = {}
-                for k in list(fields_bar[idx].keys()):
+                for k in fields_bar[idx].keys():
                     if k in data:
                         data[k] += fields_bar[idx][k]
                     else:
                         data[k] = fields_bar[idx][k]
                 data_cum = []
                 prev = 0.0
-                keys = list(data.keys())
+                keys = data.keys()
                 keys.sort()
                 # cumulate if necessary
                 for k in keys:
@@ -533,7 +514,7 @@ class report_custom(report_int):
                 ar.add_plot(plot)
                 abscissa.update(fields_bar[idx])
             idx0 += 1
-        abscissa = [[x, None] for x in abscissa]
+        abscissa = map(lambda x : [x, None], abscissa)
         abscissa.sort()
         ar.x_coord = category_coord.T(abscissa,0)
         ar.draw(can)
@@ -545,14 +526,14 @@ class report_custom(report_int):
         return True
 
     def _create_pie(self, cr, uid, ids, report, fields, results, context):
-        pdf_string = io.StringIO()
+        pdf_string = cStringIO.StringIO()
         can = canvas.init(fname=pdf_string, format='pdf')
         ar = area.T(size=(350,350), legend=legend.T(),
                     x_grid_style = None, y_grid_style = None)
-        colors = [fill_style.Plain(bgcolor=x) for x in misc.choice_colors(len(results))]
+        colors = map(lambda x:fill_style.Plain(bgcolor=x), misc.choice_colors(len(results)))
 
-        if reduce(lambda x,y : x+y, [x[1] for x in results]) == 0.0:
-            raise except_osv(_('Error'), _("The sum of the data (2nd field) is null.\nWe can't draw a pie chart !"))
+        if reduce(lambda x,y : x+y, map(lambda x : x[1],results)) == 0.0:
+            raise UserError(_("The sum of the data (2nd field) is null.\nWe can't draw a pie chart !"))
 
         plot = pie_plot.T(data=results, arc_offsets=[0,10,0,10],
                           shadow = (2, -2, fill_style.gray50),
@@ -593,7 +574,7 @@ class report_custom(report_int):
             if not f['width']:
                 f['width']=round((float(length)/count)-0.5)
 
-        _append_node('tableSize', '%s' %  ','.join(['%.2fmm' % (x['width'],) for x in fields]))
+        _append_node('tableSize', '%s' %  ','.join(map(lambda x: '%.2fmm' % (x['width'],), fields)))
         _append_node('report-header', '%s' % (report['title'],))
         _append_node('report-footer', '%s' % (report['footer'],))
 
@@ -621,7 +602,3 @@ class report_custom(report_int):
         self.obj.render()
         return True
 report_custom('report.custom')
-
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:
-

@@ -1,28 +1,10 @@
 # -*- coding: utf-8 -*-
-##############################################################################
-#    
-#    OpenERP, Open Source Management Solution
-#    Copyright (C) 2004-2009 Tiny SPRL (<http://tiny.be>).
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as
-#    published by the Free Software Foundation, either version 3 of the
-#    License, or (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-#
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.     
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from openerp.report.render.rml2pdf import utils
 import copy
 import base64
-import io
+import cStringIO
 import re
 from reportlab.lib.utils import ImageReader
 
@@ -54,7 +36,7 @@ class html2html(object):
                             src =  utils._process_text(self, new_child.get('name'))
                             if src :
                                 new_child.set('src','data:image/gif;base64,%s'%src)
-                                output = io.StringIO(base64.decodestring(src))
+                                output = cStringIO.StringIO(base64.decodestring(src))
                                 img = ImageReader(output)
                                 (width,height) = img.getSize()
                                 if not new_child.get('width'):
@@ -90,6 +72,3 @@ def parseString(node, localcontext = {}):
     root = r.render()
     root = r.url_modify(root)
     return root
-
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:

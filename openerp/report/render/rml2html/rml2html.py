@@ -1,27 +1,8 @@
 # -*- coding: utf-8 -*-
-##############################################################################
-#
-# Copyright (C) 2005, Fabien Pinckaers, UCL, FSA
-# Copyright (C) 2004-2009 Tiny SPRL (<http://tiny.be>).
-#
-# This library is free software; you can redistribute it and/or
-# modify it under the terms of the GNU Lesser General Public
-# License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
-#
-# This library is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# Lesser General Public License for more details.
-#
-# You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import sys
-import io
+import cStringIO
 from lxml import etree
 import copy
 
@@ -87,7 +68,7 @@ class _flowable(object):
                         pass
         process(node,new_node)
         if new_node.get('colWidths',False):
-            sizes = [utils.unit_get(x) for x in new_node.get('colWidths').split(',')]
+            sizes = map(lambda x: utils.unit_get(x), new_node.get('colWidths').split(','))
             tr = etree.SubElement(new_node, 'tr')
             for s in sizes:
                 etree.SubElement(tr, 'td', width=str(s))
@@ -216,7 +197,7 @@ class _rml_stylesheet(object):
         for ps in stylesheet.findall('paraStyle'):
             attr = {}
             attrs = ps.attrib
-            for key, val in list(attrs.items()):
+            for key, val in attrs.items():
                 attr[key] = val
             attrs = []
             for a in attr:
@@ -252,7 +233,7 @@ class _rml_draw_style(object):
     def get(self,tag):
         if not tag in self.style:
             return ""
-        return ';'.join(['%s:%s' % (x[0],x[1]) for x in list(self.style[tag].items())])
+        return ';'.join(['%s:%s' % (x[0],x[1]) for x in self.style[tag].items()])
 
 class _rml_template(object):
     def __init__(self, template, localcontext=None):
@@ -288,7 +269,7 @@ class _rml_template(object):
                         frames[(t.posy,t.posx,n.tag)] = t
                     else:
                         self.style.update(n)
-            keys = list(frames.keys())
+            keys = frames.keys()
             keys.sort()
             keys.reverse()
             self.page_template[id] = []
@@ -422,22 +403,20 @@ def parseString(data,localcontext = {}, fout=None):
         fp.close()
         return fout
     else:
-        fp = io.StringIO()
+        fp = cStringIO.StringIO()
         r.render(fp)
         return fp.getvalue()
 
 def rml2html_help():
-    print('Usage: rml2html input.rml >output.html')
-    print('Render the standard input (RML) and output an HTML file')
+    print 'Usage: rml2html input.rml >output.html'
+    print 'Render the standard input (RML) and output an HTML file'
     sys.exit(0)
 
 if __name__=="__main__":
     if len(sys.argv)>1:
         if sys.argv[1]=='--help':
             rml2html_help()
-        print(parseString(file(sys.argv[1], 'r').read()), end=' ')
+        print parseString(file(sys.argv[1], 'r').read()),
     else:
-        print('Usage: rml2html input.rml >output.html')
-        print('Try \'rml2html --help\' for more information.')
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:
+        print 'Usage: rml2html input.rml >output.html'
+        print 'Try \'rml2html --help\' for more information.'

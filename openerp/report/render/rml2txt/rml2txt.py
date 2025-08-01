@@ -1,30 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-##############################################################################
-#    
-#    OpenERP, Open Source Management Solution
-#    Copyright (C) 2004-2009, P. Christeas, Tiny SPRL (<http://tiny.be>).
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as
-#    published by the Free Software Foundation, either version 3 of the
-#    License, or (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-#
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.     
-#
-##############################################################################
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import sys
-import io
+import StringIO
 from lxml import etree
 
-from . import utils
+import utils
 
 Font_size= 10.0
 
@@ -168,7 +150,7 @@ class _flowable(object):
         self.tb = None
         sizes = None
         if node.get('colWidths'):
-            sizes = [utils.unit_get(x) for x in node.get('colWidths').split(',')]
+            sizes = map(lambda x: utils.unit_get(x), node.get('colWidths').split(','))
         trs = []
         for n in utils._child_get(node,self):
             if n.tag == 'tr':
@@ -348,7 +330,7 @@ class _rml_draw_style(object):
     def get(self,tag):
         if not tag in self.style:
             return ""
-        return ';'.join(['%s:%s' % (x[0],x[1]) for x in list(self.style[tag].items())])
+        return ';'.join(['%s:%s' % (x[0],x[1]) for x in self.style[tag].items()])
 
 class _rml_template(object):
     def __init__(self, localcontext, out, node, doc, images=None, path='.', title=None):
@@ -381,7 +363,7 @@ class _rml_template(object):
                             frames[(t.posy,t.posx,n.localName)] = t
                         else:
                             self.style.update(n)
-            keys = list(frames.keys())
+            keys = frames.keys()
             keys.sort()
             keys.reverse()
             self.page_template[id] = []
@@ -469,7 +451,7 @@ class _rml_doc(object):
 def parseNode(rml, localcontext=None,fout=None, images=None, path='.',title=None):
     node = etree.XML(rml)
     r = _rml_doc(node, localcontext, images, path, title=title)
-    fp = io.StringIO()
+    fp = StringIO.StringIO()
     r.render(fp)
     return fp.getvalue()
 
@@ -482,23 +464,20 @@ def parseString(rml, localcontext=None,fout=None, images=None, path='.',title=No
         fp.close()
         return fout
     else:
-        fp = io.StringIO()
+        fp = StringIO.StringIO()
         r.render(fp)
         return fp.getvalue()
 
 def trml2pdf_help():
-    print('Usage: rml2txt input.rml >output.html')
-    print('Render the standard input (RML) and output an TXT file')
+    print 'Usage: rml2txt input.rml >output.html'
+    print 'Render the standard input (RML) and output an TXT file'
     sys.exit(0)
 
 if __name__=="__main__":
     if len(sys.argv)>1:
         if sys.argv[1]=='--help':
             trml2pdf_help()
-        print(parseString(file(sys.argv[1], 'r').read()).encode('iso8859-7'))
+        print parseString(file(sys.argv[1], 'r').read()).encode('iso8859-7')
     else:
-        print('Usage: trml2txt input.rml >output.pdf')
-        print('Try \'trml2txt --help\' for more information.')
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:
-
+        print 'Usage: trml2txt input.rml >output.pdf'
+        print 'Try \'trml2txt --help\' for more information.'
